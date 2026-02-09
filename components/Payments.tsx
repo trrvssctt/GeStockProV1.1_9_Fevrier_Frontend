@@ -241,7 +241,12 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
               onChange={e => setFilters({...filters, method: e.target.value})}
               className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
             >
+              <option value="ALL">Tous les canaux</option>
+              <option value="CHEQUE">CHEQUE</option>
+              <option value="CASH">ESPECES (CASH)</option>
+              <option value="MOBILE_MONEY">MOBILE MONEY</option>
               <option value="WAVE">WAVE</option>
+
             </select>
           </div>
 
