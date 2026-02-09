@@ -2,7 +2,9 @@
 import { authBridge } from './authBridge';
 
 // Use Vite env var when available; fallback to localhost
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://gestockprov1-1-9-fevrier.onrender.com';
+// Ensure the base URL ends with `/api` so frontend requests target the API routes.
+const rawBackend = (import.meta as any).env?.VITE_BACKEND_URL || 'https://gestockprov1-1-9-fevrier.onrender.com';
+const BACKEND_URL = rawBackend.endsWith('/api') ? rawBackend : `${rawBackend.replace(/\/+$/, '')}/api`;
 
 export interface ApiError {
   error: string;
