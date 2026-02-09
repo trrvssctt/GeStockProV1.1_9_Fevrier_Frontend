@@ -3,6 +3,7 @@ services:
     name: gestockprov-frontend
     env: static
     staticPublishPath: dist
+    buildCommand: npm ci && npm run build
     routes:
       - type: rewrite
         source: /*
