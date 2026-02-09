@@ -18,13 +18,13 @@ export default defineConfig(({ mode }) => {
         chunkSizeWarningLimit: 1200,
         rollupOptions: {
           output: {
+            // Avoid manual chunking per-package which can create circular
+            // dependencies between vendor chunks and produce runtime errors
+            // (e.g. "B is undefined"). Use a single `vendor` chunk so that
+            // all node_modules are bundled together and execution order is
+            // deterministic.
             manualChunks(id: string) {
               if (id.includes('node_modules')) {
-                if (id.includes('react')) return 'vendor_react';
-                if (id.includes('recharts')) return 'vendor_recharts';
-                if (id.includes('lucide-react')) return 'vendor_icons';
-                if (id.includes('stripe')) return 'vendor_stripe';
-                if (id.includes('sequelize')) return 'vendor_sequelize';
                 return 'vendor';
               }
             }
