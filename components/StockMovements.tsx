@@ -39,6 +39,14 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
     reference: ''
   });
 
+  const [modalSearch, setModalSearch] = useState('');
+
+  const filteredStocks = useMemo(() => {
+    const q = modalSearch.trim().toLowerCase();
+    if (!q) return stocks || [];
+    return (stocks || []).filter(s => ((s.name || '') + ' ' + (s.sku || '')).toLowerCase().includes(q));
+  }, [stocks, modalSearch]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -304,21 +312,27 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                  <div className="flex items-center gap-4"><Boxes size={28}/><h3 className="text-xl font-black uppercase tracking-tight">Réception Stock</h3></div>
                  <button onClick={() => setShowInModal(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><X size={24}/></button>
               </div>
-              <div className="flex-1 grid grid-cols-12 overflow-hidden">
-                 <div className="col-span-7 border-r border-slate-100 flex flex-col bg-slate-50/30">
-                    <div className="flex-1 overflow-y-auto p-8 space-y-3 custom-scrollbar">
-                       {stocks.map(item => (
-                          <button key={item.id} onClick={() => addItemToBulk(item.id)} className="w-full p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-500 transition-all active:scale-95">
-                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform"><Package size={20}/></div>
-                                <div className="text-left"><p className="text-xs font-black text-slate-800 uppercase">{item.name}</p><p className="text-[9px] text-slate-400 font-bold">SKU: {item.sku}</p></div>
-                             </div>
-                             <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">AJOUTER</span>
-                          </button>
-                       ))}
+                <div className="flex-1 grid grid-cols-12 overflow-hidden">
+                  <div className="col-span-12 md:col-span-7 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col min-h-0 bg-slate-50/30">
+                    <div className="p-4 md:p-8 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+                      <Search className="text-slate-400" size={16} />
+                      <input value={modalSearch} onChange={e => setModalSearch(e.target.value)} placeholder="Rechercher produit..." className="w-full bg-transparent outline-none text-sm font-black text-slate-800" />
                     </div>
-                 </div>
-                 <div className="col-span-5 flex flex-col bg-white">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-3 custom-scrollbar min-h-0">
+                      {(filteredStocks || []).length === 0 ? (
+                        <div className="w-full p-6 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-400 text-center text-[10px] uppercase font-black">Aucun produit</div>
+                      ) : filteredStocks.map(item => (
+                        <button key={item.id} onClick={() => addItemToBulk(item.id)} className="w-full p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-500 transition-all active:scale-95">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform"><Package size={20}/></div>
+                            <div className="text-left"><p className="text-xs font-black text-slate-800 uppercase">{item.name}</p><p className="text-[9px] text-slate-400 font-bold">SKU: {item.sku}</p></div>
+                          </div>
+                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">AJOUTER</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="col-span-12 md:col-span-5 flex flex-col min-h-0 bg-white">
                     <div className="p-8 border-b border-slate-50 flex justify-between items-center"><h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Saisie par lot</h4><span className="text-[9px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">{bulkInForm.items.length} items</span></div>
                     <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                        {bulkInForm.items.length === 0 ? (
@@ -336,7 +350,7 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                           );
                        })}
                     </div>
-                    <div className="p-8 bg-slate-900 text-white space-y-4">
+                      <div className="p-8 bg-slate-900 text-white space-y-4 flex-none z-20">
                        <input type="text" placeholder="Référence Bon de Livraison" value={bulkInForm.reference} onChange={e => setBulkInForm({...bulkInForm, reference: e.target.value.toUpperCase()})} className="w-full bg-white/10 border border-white/10 rounded-2xl px-5 py-3 text-xs font-bold outline-none text-white focus:ring-2 focus:ring-indigo-500 transition-all" />
                        <button onClick={handleBulkIn} disabled={actionLoading || bulkInForm.items.length === 0} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3">
                           {actionLoading ? <Loader2 className="animate-spin" /> : <>SCELLER LA RÉCEPTION <CheckCircle2 size={18}/></>}
