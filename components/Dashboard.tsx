@@ -21,6 +21,7 @@ import {
 // Added StockItem to the imports
 import { User, UserRole, StockItem } from '../types';
 import { apiClient } from '../services/api';
+import waveQr from '../assets/qr_code_marchant_wave.png';
 
 const StatCard = ({ title, value, subValue, icon: Icon, color, trend }: any) => (
   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm group hover:shadow-xl transition-all flex flex-col justify-between h-full overflow-hidden relative">
@@ -222,11 +223,51 @@ const Dashboard: React.FC<{ user: User, currency: string, onNavigate?: (tab: str
     return { out, low, total: stocks.length };
   }, [stocks]);
 
+  // --- PAYMENT MODAL STATE FOR RE-SUBSCRIPTION VIA WAVE QR ---
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [txReference, setTxReference] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  const processSubscriptionPayment = async () => {
+    setIsProcessingPayment(true);
+    try {
+      const transactionId = txReference || `TX-${Date.now()}`;
+      const payload = {
+        planId: subscription?.subscription?.planId || subscription?.planId || 'DEFAULT',
+        paymentMethod: 'WAVE',
+        transactionId,
+        phone: phoneNumber,
+        status: 'PENDING'
+      };
+
+      await apiClient.post('/billing/upgrade', payload);
+
+      // optimistic local update
+      setSubscription((prev: any) => ({ ...(prev || {}), status: 'PENDING' }));
+      setPaymentSuccess(true);
+      setTimeout(() => {
+        setShowPaymentModal(false);
+        setPaymentSuccess(false);
+        setTxReference('');
+        setPhoneNumber('');
+      }, 2200);
+    } catch (err) {
+      console.error('Payment error', err);
+      // Try to show the API error message when available
+      const serverMsg = err?.message || err?.error || (err && typeof err === 'string' ? err : null);
+      alert("Erreur lors de l'enregistrement du paiement. " + (serverMsg || 'Veuillez réessayer.'));
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
   const renderAdminDashboard = () => (
     <div className="space-y-10 animate-in fade-in duration-700">
       
-      {/* ALERTE ABONNEMENT CRITIQUE */}
-      {subAlert && (subAlert.isCritical || subAlert.isExpired) && (
+      {/* ALERTE ABONNEMENT CRITIQUE (affiche seulement si échéance dans <=5 jours) */}
+      {subAlert && subAlert.isCritical && (
         <div className={`p-8 rounded-[2.5rem] border-2 flex flex-col md:flex-row items-center justify-between gap-6 animate-pulse shadow-2xl ${subAlert.isExpired ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'}`}>
           <div className="flex items-center gap-6 text-center md:text-left">
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${subAlert.isExpired ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'}`}>
@@ -245,13 +286,52 @@ const Dashboard: React.FC<{ user: User, currency: string, onNavigate?: (tab: str
             </div>
           </div>
           <button 
-            onClick={() => onNavigate?.('subscription')}
+            onClick={() => setShowPaymentModal(true)}
             className={`px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center gap-3 ${subAlert.isExpired ? 'bg-rose-600 text-white hover:bg-black' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
           >
             <CreditCard size={18}/> RÉGULARISER MAINTENANT
           </button>
         </div>
       )}
+
+          {/* PAYMENT MODAL FOR WAVE QR */}
+          {showPaymentModal && (
+            <div className="fixed inset-0 z-[900] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
+              <div className="w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
+                <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center">
+                  <h3 className="text-lg font-black uppercase">Réaliser le paiement - Wave</h3>
+                  <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                </div>
+                <div className="p-8">
+                  {paymentSuccess ? (
+                    <div className="text-center py-12">
+                      <div className="w-24 h-24 bg-emerald-500 text-white rounded-full mx-auto flex items-center justify-center mb-6"><CheckCircle2 size={36}/></div>
+                      <h4 className="text-xl font-black">Paiement enregistré</h4>
+                      <p className="text-sm text-slate-500">Le paiement est en attente de validation.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <img src={waveQr} alt="Wave QR" className="w-64 h-64 object-contain rounded-xl shadow-md border" />
+                        <p className="text-[10px] text-slate-500">Scannez le QR avec l'app Wave puis saisissez la référence ci-dessous.</p>
+                      </div>
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black uppercase text-slate-400">Numéro téléphone (optionnel)</label>
+                        <input value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="Ex: 22177xxxxxxx" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none" />
+                        <label className="text-[10px] font-black uppercase text-slate-400">Référence Transaction Wave</label>
+                        <input value={txReference} onChange={e => setTxReference(e.target.value)} placeholder="Référence fournie par Wave" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none" />
+
+                        <div className="flex items-center gap-3 pt-4">
+                          <button onClick={() => setShowPaymentModal(false)} className="flex-1 py-3 rounded-2xl border border-slate-200 font-black uppercase text-sm">Annuler</button>
+                          <button disabled={isProcessingPayment} onClick={processSubscriptionPayment} className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black uppercase text-sm disabled:opacity-50">{isProcessingPayment ? 'Traitement...' : 'Enregistrer paiement'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
       {/* KPI GRID HOLISTIQUE */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

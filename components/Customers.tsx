@@ -21,6 +21,10 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterSegment, setFilterSegment] = useState<'ALL' | 'ELITE' | 'RISK'>('ALL');
+  const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('CARD');
+  const [pageSize, setPageSize] = useState(6);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', minOutstanding: '', maxOutstanding: '', status: 'ALL' });
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState<Customer | null>(null);
@@ -42,59 +46,13 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
     mainContact: '',
     billingAddress: '',
     paymentTerms: 30,
-    maxCreditLimit: 5000
+  maxCreditLimit: 5000
   });
-
   const canModify = authBridge.canPerform(user, 'EDIT', 'customers');
   const customersAllowed = authBridge.isCreationAllowed(user, 'customers', customers.length);
   const isCustomersLimitReached = !customersAllowed;
   const currentPlanId = (plan?.id || (user as any).planId || 'BASIC') as string;
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [custData, salesData] = await Promise.all([
-        apiClient.get('/customers'),
-        apiClient.get('/sales')
-      ]);
-      setCustomers(custData || []);
-      setSales(salesData || []);
-    } catch (err: any) {
-      setError(err.message || "Erreur de liaison Kernel.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, []);
-
-  // Vérifie si un client a des ventes liées
-  const hasLinkedSales = (customerId: string) => {
-    return sales.some(s => (s.customerId || s.customer_id) === customerId);
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    setError(null);
-      try {
-      if (!authBridge.isCreationAllowed(user, 'customers', customers.length)) {
-        if (currentPlanId === 'PRO') setError('Limite du plan PRO atteinte : maximum 12 clients.');
-        else setError('Limite du plan Basic atteinte : maximum 5 clients.');
-        setActionLoading(false);
-        return;
-      }
-      const data = await apiClient.post('/customers', formData);
-      setCustomers([data, ...customers]);
-      setShowCreateModal(false);
-      resetForm();
-    } catch (err: any) {
-      setError(err.message || "Échec de l'enregistrement.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +66,28 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
       resetForm();
     } catch (err: any) {
       setError(err.message || "Échec de la mise à jour.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    setError(null);
+    try {
+      if (!authBridge.isCreationAllowed(user, 'customers', customers.length)) {
+        if (currentPlanId === 'PRO') setError('Limite du plan PRO atteinte : maximum 12 clients.');
+        else setError('Limite du plan Basic atteinte : maximum 5 clients.');
+        setActionLoading(false);
+        return;
+      }
+      const data = await apiClient.post('/customers', formData);
+      setCustomers([data, ...customers]);
+      setShowCreateModal(false);
+      resetForm();
+    } catch (err: any) {
+      setError(err.message || "Échec de l'enregistrement.");
     } finally {
       setActionLoading(false);
     }
@@ -170,18 +150,58 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
     }
   };
 
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [custData, salesData] = await Promise.all([
+        apiClient.get('/customers'),
+        apiClient.get('/sales')
+      ]);
+      setCustomers(custData || []);
+      setSales(salesData || []);
+    } catch (err: any) {
+      setError(err.message || 'Erreur de liaison Kernel.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const hasLinkedSales = (customerId: string) => {
+    return sales.some(s => (s.customerId || s.customer_id) === customerId);
+  };
+
   const filteredCustomers = useMemo(() => {
     return customers.filter(c => {
-      const searchStr = search.toLowerCase();
+      const searchStr = (search || '').toLowerCase();
       const matchesSearch = (c.companyName || '').toLowerCase().includes(searchStr) || 
                             (c.email || '').toLowerCase().includes(searchStr);
       if (!matchesSearch) return false;
-      if (filterSegment === 'ALL') return true;
-      if (filterSegment === 'ELITE') return (c.outstandingBalance || 0) > 10000;
-      if (filterSegment === 'RISK') return c.healthStatus === 'CRITICAL';
+
+      // Segment quick filters
+      if (filterSegment === 'ELITE' && !((c.outstandingBalance || 0) > 10000)) return false;
+      if (filterSegment === 'RISK' && !(c.healthStatus === 'CRITICAL')) return false;
+
+      // Advanced filters
+      if (filters.status && filters.status !== 'ALL' && (c.status || 'actif') !== filters.status) return false;
+
+      const created = (c as any).createdAt ? new Date((c as any).createdAt).toISOString().split('T')[0] : '';
+      if (filters.dateFrom && created && created < filters.dateFrom) return false;
+      if (filters.dateTo && created && created > filters.dateTo) return false;
+
+      const minO = filters.minOutstanding !== '' ? parseFloat(filters.minOutstanding) : null;
+      const maxO = filters.maxOutstanding !== '' ? parseFloat(filters.maxOutstanding) : null;
+      const out = Number(c.outstandingBalance || 0);
+      if (minO !== null && out < minO) return false;
+      if (maxO !== null && out > maxO) return false;
+
       return true;
     });
-  }, [customers, search, filterSegment]);
+  }, [customers, search, filterSegment, filters]);
+
+  const visibleCustomers = viewMode === 'CARD' ? filteredCustomers.slice(0, pageSize) : filteredCustomers;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -192,10 +212,15 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
           </h2>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">Intelligence Commerciale • Instance Isolé</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <button onClick={fetchData} className="p-4 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-sm">
              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
           </button>
+          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl">
+            <button onClick={() => setViewMode('CARD')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'CARD' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>CARTE</button>
+            <button onClick={() => setViewMode('LIST')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'LIST' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>LISTE</button>
+          </div>
+          <button onClick={() => setShowFilters(s => !s)} className={`p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>{showFilters ? 'Masquer filtres' : 'Filtres'}</button>
           {canModify && (
             isCustomersLimitReached ? (
               <div className="flex items-center gap-3 px-6 py-4 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 text-[10px] font-black uppercase tracking-widest shadow-sm">
@@ -231,6 +256,42 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
         </div>
       </div>
 
+      {showFilters && (
+        <div className="bg-white p-4 rounded-[1.5rem] border border-slate-100 shadow-sm mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400">Date de création (début)</label>
+              <input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 mt-2" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400">Date de création (fin)</label>
+              <input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 mt-2" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400">Statut</label>
+              <select value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 mt-2">
+                <option value="ALL">Tous</option>
+                <option value="actif">Actifs</option>
+                <option value="supprimer">Supprimés</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400">Encours min ({currency})</label>
+              <input type="number" value={filters.minOutstanding} onChange={e => setFilters({...filters, minOutstanding: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 mt-2" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400">Encours max ({currency})</label>
+              <input type="number" value={filters.maxOutstanding} onChange={e => setFilters({...filters, maxOutstanding: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 mt-2" />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => { setFilters({ dateFrom: '', dateTo: '', minOutstanding: '', maxOutstanding: '', status: 'ALL' }); setSearch(''); }} className="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all">RÉINITIALISER</button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => <div key={i} className="h-64 bg-white rounded-[2.5rem] animate-pulse border border-slate-100"></div>)}
@@ -240,65 +301,111 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucun client trouvé</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredCustomers.map(customer => {
-            const isLinked = hasLinkedSales(customer.id);
-            return (
-              <div key={customer.id} className={`bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all p-8 flex flex-col h-full group relative overflow-hidden border-b-4 border-transparent hover:border-indigo-500 ${isLinked ? 'grayscale-[0.3]' : ''}`}>
-                <div className="flex justify-between items-start mb-6">
-                  <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-inner group-hover:scale-110 transition-transform uppercase">
-                    {(customer.companyName || 'C').charAt(0)}
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${customer.healthStatus === 'GOOD' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : customer.healthStatus === 'WARNING' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
-                    {customer.healthStatus === 'GOOD' ? 'SOLVABLE' : customer.healthStatus === 'WARNING' ? 'VIGILANCE' : 'RISQUE'}
-                  </div>
-                </div>
-                <h3 className="font-black text-slate-900 text-lg uppercase truncate leading-none">{customer.companyName || 'Passage'}</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-2 tracking-widest truncate flex items-center gap-2"><Mail size={12}/> {customer.email}</p>
-                
-                <div className="mt-8 grid grid-cols-2 gap-4 flex-1">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Encours</p>
-                    <p className="text-sm font-black text-slate-900">{(customer.outstandingBalance || 0).toLocaleString()} {currency}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Délai</p>
-                    <p className="text-sm font-black text-slate-900">{customer.paymentTerms || 30} Jours</p>
-                  </div>
-                </div>
-
-                {isLinked && (
-                  <div className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl w-fit">
-                    <Info size={12} className="text-slate-400" />
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ventes liées détectées</span>
-                  </div>
-                )}
-                
-                <div className="mt-8 flex justify-between gap-2 border-t pt-6">
-                  <button onClick={() => openDetails(customer)} className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2 hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all">DÉTAILS <Eye size={16} /></button>
-                  {canModify && (
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => openEdit(customer)} 
-                        title={isLinked ? "Modification verrouillée" : "Modifier"}
-                        className={`p-3 rounded-xl shadow-sm transition-all ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'bg-white border border-slate-100 text-slate-400 hover:text-amber-600'}`}
-                      >
-                        <Edit3 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => !isLinked && setShowDeleteConfirm(customer)} 
-                        title={isLinked ? "Suppression verrouillée" : "Supprimer"}
-                        className={`p-3 rounded-xl shadow-sm transition-all ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'bg-white border border-slate-100 text-slate-400 hover:text-rose-600'}`}
-                      >
-                        <Trash2 size={18} />
-                      </button>
+        viewMode === 'CARD' ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {visibleCustomers.map(customer => {
+                const isLinked = hasLinkedSales(customer.id);
+                return (
+                  <div key={customer.id} className={`bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all p-8 flex flex-col h-full group relative overflow-hidden border-b-4 border-transparent hover:border-indigo-500 ${isLinked ? 'grayscale-[0.3]' : ''}`}>
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-inner group-hover:scale-110 transition-transform uppercase">
+                        {(customer.companyName || 'C').charAt(0)}
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${customer.healthStatus === 'GOOD' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : customer.healthStatus === 'WARNING' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                        {customer.healthStatus === 'GOOD' ? 'SOLVABLE' : customer.healthStatus === 'WARNING' ? 'VIGILANCE' : 'RISQUE'}
+                      </div>
                     </div>
-                  )}
-                </div>
+                    <h3 className="font-black text-slate-900 text-lg uppercase truncate leading-none">{customer.companyName || 'Passage'}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-2 tracking-widest truncate flex items-center gap-2"><Mail size={12}/> {customer.email}</p>
+                    
+                    <div className="mt-8 grid grid-cols-2 gap-4 flex-1">
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Encours</p>
+                        <p className="text-sm font-black text-slate-900">{(customer.outstandingBalance || 0).toLocaleString()} {currency}</p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Délai</p>
+                        <p className="text-sm font-black text-slate-900">{customer.paymentTerms || 30} Jours</p>
+                      </div>
+                    </div>
+
+                    {isLinked && (
+                      <div className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl w-fit">
+                        <Info size={12} className="text-slate-400" />
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ventes liées détectées</span>
+                      </div>
+                    )}
+                    
+                    <div className="mt-8 flex justify-between gap-2 border-t pt-6">
+                      <button onClick={() => openDetails(customer)} className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2 hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all">DÉTAILS <Eye size={16} /></button>
+                      {canModify && (
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => openEdit(customer)} 
+                            title={isLinked ? "Modification verrouillée" : "Modifier"}
+                            className={`p-3 rounded-xl shadow-sm transition-all ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'bg-white border border-slate-100 text-slate-400 hover:text-amber-600'}`}
+                          >
+                            <Edit3 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => !isLinked && setShowDeleteConfirm(customer)} 
+                            title={isLinked ? "Suppression verrouillée" : "Supprimer"}
+                            className={`p-3 rounded-xl shadow-sm transition-all ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'bg-white border border-slate-100 text-slate-400 hover:text-rose-600'}`}
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredCustomers.length > visibleCustomers.length && (
+              <div className="flex justify-center mt-6">
+                <button onClick={() => setPageSize(prev => prev + 6)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest">VOIR PLUS</button>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </>
+        ) : (
+          <div className="bg-white rounded-[1.5rem] border border-slate-100 shadow-sm overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-400 text-[9px] font-black uppercase tracking-widest border-b">
+                  <th className="px-6 py-4">Client</th>
+                  <th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4 text-center">Solvabilité</th>
+                  <th className="px-6 py-4 text-right">Encours</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredCustomers.map(customer => {
+                  const isLinked = hasLinkedSales(customer.id);
+                  return (
+                    <tr key={customer.id} className="group hover:bg-slate-50/50 transition-all">
+                      <td className="px-6 py-4 font-black text-slate-900">{customer.companyName || '—'}</td>
+                      <td className="px-6 py-4 text-slate-500 text-sm truncate">{customer.email}</td>
+                      <td className="px-6 py-4 text-center text-[11px] font-black">{customer.healthStatus === 'GOOD' ? 'SOLVABLE' : customer.healthStatus === 'WARNING' ? 'VIGILANCE' : 'RISQUE'}</td>
+                      <td className="px-6 py-4 text-right font-black">{(customer.outstandingBalance || 0).toLocaleString()} {currency}</td>
+                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                        <button onClick={() => openDetails(customer)} className="px-3 py-2 rounded-xl text-slate-400 hover:text-indigo-600">Voir</button>
+                        {canModify && (
+                          <>
+                            <button onClick={() => openEdit(customer)} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}><Edit3 size={16} /></button>
+                            <button onClick={() => !isLinked && setShowDeleteConfirm(customer)} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={16} /></button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* MODAL CRÉATION / MODIFICATION */}
@@ -318,7 +425,7 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Identité Entreprise</label>
-                      <input type="text" required value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Raison Sociale" />
+                      <input type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Raison Sociale (optionnel)" />
                       <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Email de contact" />
                       <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Téléphone" />
                       <input type="text" value={formData.mainContact} onChange={e => setFormData({...formData, mainContact: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Nom du responsable" />

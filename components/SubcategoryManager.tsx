@@ -30,7 +30,11 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  // View mode, pagination and filters (similar to CategoryManager)
+  const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('CARD');
+  const [pageSize, setPageSize] = useState<number>(6);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ search: '', dateFrom: '', dateTo: '', linked: 'ALL' });
   const [showModal, setShowModal] = useState<'CREATE' | 'EDIT' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Subcategory | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
@@ -131,7 +135,21 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
     return categories.find(c => c.id === catId)?.name || 'Segment Parent';
   };
 
-  const filteredSubcategories = subcategories.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredSubcategories = subcategories.filter(s => {
+    const q = filters.search || '';
+    const matchesSearch = s.name.toLowerCase().includes(q.toLowerCase()) || (s.description || '').toLowerCase().includes(q.toLowerCase());
+
+    const created = s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : '';
+    const matchesFrom = filters.dateFrom === '' || (created && created >= filters.dateFrom);
+    const matchesTo = filters.dateTo === '' || (created && created <= filters.dateTo);
+
+    const linkedFlag = hasLinkedProducts(s.id);
+    const matchesLinked = filters.linked === 'ALL' || (filters.linked === 'LINKED' && linkedFlag) || (filters.linked === 'UNLINKED' && !linkedFlag);
+
+    return matchesSearch && matchesFrom && matchesTo && matchesLinked;
+  });
+
+  const visibleSubcategories = viewMode === 'CARD' ? filteredSubcategories.slice(0, pageSize) : filteredSubcategories;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -182,11 +200,33 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
           <input 
             type="text" 
             placeholder="Rechercher un sous-segment..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={filters.search}
+            onChange={(e) => setFilters({...filters, search: e.target.value})}
             className="w-full bg-slate-50 border-none rounded-2xl pl-14 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-inner" 
           />
         </div>
+
+        <div className="hidden sm:flex items-center gap-2">
+          <button
+            onClick={() => setViewMode('CARD')}
+            className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${viewMode === 'CARD' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600'}`}
+          >
+            Carte
+          </button>
+          <button
+            onClick={() => setViewMode('LIST')}
+            className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${viewMode === 'LIST' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600'}`}
+          >
+            Liste
+          </button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+          >
+            FILTRES
+          </button>
+        </div>
+
         <button onClick={fetchData} className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all">
           <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -195,6 +235,64 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
       {error && (
         <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-[10px] font-black uppercase flex items-center gap-3 animate-in shake">
           <AlertCircle size={16}/> {error}
+        </div>
+      )}
+
+      {/* Filtres avancés */}
+      {showFilters && (
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl animate-in slide-in-from-top-4 duration-300 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Recherche</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={e => setFilters({...filters, search: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              placeholder="Nom ou description..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Période (Du)</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={e => setFilters({...filters, dateFrom: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Période (Au)</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={e => setFilters({...filters, dateTo: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Liés</label>
+            <select
+              value={filters.linked}
+              onChange={e => setFilters({...filters, linked: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
+            >
+              <option value="ALL">Tous</option>
+              <option value="LINKED">Avec produits</option>
+              <option value="UNLINKED">Sans produits</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-3 flex gap-2 pt-2">
+            <button
+              onClick={() => setFilters({ search: '', dateFrom: '', dateTo: '', linked: 'ALL' })}
+              className="px-6 py-3 bg-slate-100 text-slate-500 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all w-full"
+            >
+              RÉINITIALISER LES FILTRES
+            </button>
+          </div>
         </div>
       )}
 
@@ -208,54 +306,105 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucune sous-catégorie trouvée</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredSubcategories.map(sub => {
-            const isLinked = hasLinkedProducts(sub.id);
-            return (
-              <div key={sub.id} className={`bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden flex flex-col h-full border-b-4 border-b-transparent hover:border-b-indigo-500 ${isLinked ? 'grayscale-[0.5]' : ''}`}>
-                 <div className="flex justify-between items-start mb-6 shrink-0">
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-1 bg-indigo-50 px-2 py-0.5 rounded-full w-fit">
-                        {getParentCategoryName(sub.categoryId)}
-                      </span>
-                      <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight truncate max-w-[200px]">{sub.name}</h3>
-                    </div>
-                    {canModify && (
-                      <div className="flex gap-1">
-                        <button 
-                          onClick={() => openEdit(sub)} 
-                          title={isLinked ? "Modification bloquée" : "Modifier"}
-                          className={`p-2 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}
-                        >
-                          <Edit3 size={18}/>
-                        </button>
-                        <button 
-                          onClick={() => !isLinked && setShowDeleteConfirm(sub)} 
-                          title={isLinked ? "Suppression bloquée" : "Supprimer"}
-                          className={`p-2 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
-                        >
-                          <Trash2 size={18}/>
-                        </button>
-                      </div>
-                    )}
-                 </div>
-                 <p className="text-xs text-slate-400 font-medium leading-relaxed mb-6 flex-1 line-clamp-3">{sub.description || 'Spécialisation métier du catalogue.'}</p>
-                 
-                 {isLinked && (
-                   <div className="mb-4 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl w-fit">
-                      <Info size={12} className="text-slate-400" />
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Articles liés en stock</span>
-                   </div>
-                 )}
+        <>
+          {viewMode === 'CARD' ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {visibleSubcategories.map(sub => {
+                  const isLinked = hasLinkedProducts(sub.id);
+                  return (
+                    <div key={sub.id} className={`bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden flex flex-col h-full border-b-4 border-b-transparent hover:border-b-indigo-500 ${isLinked ? 'grayscale-[0.5]' : ''}`}>
+                       <div className="flex justify-between items-start mb-6 shrink-0">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-1 bg-indigo-50 px-2 py-0.5 rounded-full w-fit">
+                              {getParentCategoryName(sub.categoryId)}
+                            </span>
+                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight truncate max-w-[200px]">{sub.name}</h3>
+                          </div>
+                          {canModify && (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => openEdit(sub)} 
+                                title={isLinked ? "Modification bloquée" : "Modifier"}
+                                className={`p-2 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}
+                              >
+                                <Edit3 size={18}/>
+                              </button>
+                              <button 
+                                onClick={() => !isLinked && setShowDeleteConfirm(sub)} 
+                                title={isLinked ? "Suppression bloquée" : "Supprimer"}
+                                className={`p-2 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                              >
+                                <Trash2 size={18}/>
+                              </button>
+                            </div>
+                          )}
+                       </div>
+                       <p className="text-xs text-slate-400 font-medium leading-relaxed mb-6 flex-1 line-clamp-3">{sub.description || 'Spécialisation métier du catalogue.'}</p>
+                       
+                       {isLinked && (
+                         <div className="mb-4 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl w-fit">
+                            <Info size={12} className="text-slate-400" />
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Articles liés en stock</span>
+                         </div>
+                       )}
 
-                 <div className="pt-6 border-t border-slate-50 flex justify-between items-center shrink-0">
-                    <span className="text-[8px] font-mono text-slate-300 font-bold uppercase tracking-widest">ID:{sub.id.slice(0,8)}</span>
-                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shadow-inner group-hover:scale-110 transition-transform"><FolderTree size={16}/></div>
-                 </div>
+                       <div className="pt-6 border-t border-slate-50 flex justify-between items-center shrink-0">
+                          <span className="text-[8px] font-mono text-slate-300 font-bold uppercase tracking-widest">ID:{sub.id.slice(0,8)}</span>
+                          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shadow-inner group-hover:scale-110 transition-transform"><FolderTree size={16}/></div>
+                       </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+
+              {filteredSubcategories.length > visibleSubcategories.length && (
+                <div className="flex justify-center mt-6">
+                  <button onClick={() => setPageSize(prev => prev + 6)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest">VOIR PLUS</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="bg-white rounded-[1.5rem] border border-slate-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-400 text-[9px] font-black uppercase tracking-widest border-b">
+                    <th className="px-6 py-4">Nom</th>
+                    <th className="px-6 py-4">Segment Parent</th>
+                    <th className="px-6 py-4">Description</th>
+                    <th className="px-6 py-4 text-center">Liés</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredSubcategories.map(sub => {
+                    const isLinked = hasLinkedProducts(sub.id);
+                    return (
+                      <tr key={sub.id} className="group hover:bg-slate-50/50 transition-all">
+                        <td className="px-6 py-4 font-black text-slate-900">{sub.name}</td>
+                        <td className="px-6 py-4 text-slate-600">{getParentCategoryName(sub.categoryId)}</td>
+                        <td className="px-6 py-4 text-slate-500 text-sm">{sub.description}</td>
+                        <td className="px-6 py-4 text-center text-[11px] font-black">{isLinked ? 'Oui' : 'Non'}</td>
+                        <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                          {canModify && (
+                            <>
+                              <button onClick={() => openEdit(sub)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}>
+                                <Edit3 size={16} />
+                              </button>
+                              <button onClick={() => !isLinked && setShowDeleteConfirm(sub)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* CREATE / EDIT MODAL */}

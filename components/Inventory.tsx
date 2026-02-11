@@ -18,7 +18,11 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  // View mode, pagination and filters
+  const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('CARD');
+  const [pageSize, setPageSize] = useState<number>(6);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ search: '', dateFrom: '', dateTo: '', subcategoryId: '', status: 'ALL' });
   const [modalMode, setModalMode] = useState<'CREATE' | 'EDIT' | 'VIEW' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<StockItem | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
@@ -178,10 +182,23 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
     }
   };
 
-  const filteredStocks = stocks.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.sku.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStocks = stocks.filter(item => {
+    const q = filters.search || '';
+    const matchesText = (item.name || '').toLowerCase().includes(q.toLowerCase()) || (item.sku || '').toLowerCase().includes(q.toLowerCase());
+
+    const scMatch = !filters.subcategoryId || (item.subcategoryId || item.subcategory_id) === filters.subcategoryId;
+
+    const created = (item as any).createdAt || (item as any).created_at || '';
+    const createdDate = created ? new Date(created).toISOString().split('T')[0] : '';
+    const matchesFrom = filters.dateFrom === '' || (createdDate && createdDate >= filters.dateFrom);
+    const matchesTo = filters.dateTo === '' || (createdDate && createdDate <= filters.dateTo);
+
+    const statusMatch = filters.status === 'ALL' || (filters.status === 'ALERT' && item.currentLevel <= item.minThreshold) || (filters.status === 'OK' && item.currentLevel > item.minThreshold);
+
+    return matchesText && scMatch && matchesFrom && matchesTo && statusMatch;
+  });
+
+  const visibleStocks = viewMode === 'CARD' ? filteredStocks.slice(0, pageSize) : filteredStocks;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20 relative">
@@ -224,8 +241,15 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
       <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="Rechercher par nom ou SKU..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl pl-14 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-inner" />
+          <input type="text" placeholder="Rechercher par nom ou SKU..." value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl pl-14 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-inner" />
         </div>
+
+        <div className="hidden sm:flex items-center gap-2">
+          <button onClick={() => setViewMode('CARD')} className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${viewMode === 'CARD' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600'}`}>Carte</button>
+          <button onClick={() => setViewMode('LIST')} className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${viewMode === 'LIST' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600'}`}>Liste</button>
+          <button onClick={() => setShowFilters(!showFilters)} className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>FILTRES</button>
+        </div>
+
         <button onClick={fetchData} className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-sm">
           <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -237,74 +261,162 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-        {loading ? [...Array(6)].map((_, i) => <div key={i} className="h-64 bg-white rounded-[3rem] animate-pulse border border-slate-100"></div>) : 
-         filteredStocks.length === 0 ? (
-           <div className="py-20 bg-white rounded-[3rem] border border-dashed border-slate-200 text-center col-span-1 md:col-span-2 xl:col-span-3">
-             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucun produit trouvé</p>
-           </div>
-         ) : filteredStocks.map((item) => {
-          const isLinked = isProductLinked(item.id);
-          return (
-            <div key={item.id} className={`bg-white rounded-[3rem] border border-slate-100 shadow-sm hover:shadow-2xl transition-all p-8 flex flex-col group border-b-4 border-transparent hover:border-indigo-500 ${isLinked ? 'grayscale-[0.3]' : ''}`}>
-              <div className="flex justify-between items-start mb-6">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center transition-transform group-hover:scale-110 shadow-inner overflow-hidden">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} className="w-full h-full object-cover" alt={item.name} />
-                  ) : (
-                    <Package size={28} />
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border ${item.currentLevel <= item.minThreshold ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                    {item.currentLevel <= item.minThreshold ? 'ALERTE STOCK' : 'EN STOCK'}
-                  </span>
-                  {isLinked && (
-                    <span className="text-[7px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">Ventes liées</span>
-                  )}
-                </div>
-              </div>
-              <h3 className="font-black text-slate-900 text-lg uppercase truncate leading-none">{item.name}</h3>
-              <p className="text-[10px] text-slate-400 font-mono mt-3 truncate font-bold">SKU: {item.sku}</p>
-              
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Disponible</p>
-                   <p className="text-sm font-black text-slate-900">{item.currentLevel}</p>
-                 </div>
-                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Prix Unit.</p>
-                   <p className="text-sm font-black text-slate-900">{Number(item.unitPrice).toLocaleString()} {currency}</p>
-                 </div>
+          {/* Filtres avancés */}
+          {showFilters && (
+            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl animate-in slide-in-from-top-4 duration-300 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Recherche</label>
+                <input type="text" value={filters.search} onChange={e => setFilters({...filters, search: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Nom, SKU..." />
               </div>
 
-              <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-50">
-                 <button onClick={() => openDetails(item)} className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all">DÉTAILS <Eye size={16}/></button>
-                 {canModify && (
-                   <div className="flex gap-1">
-                      <button 
-                        onClick={() => openEdit(item)} 
-                        disabled={!!activeInventory} 
-                        title={isLinked ? "Modification verrouillée" : "Modifier"}
-                        className={`p-2.5 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
-                      >
-                        <Edit3 size={18}/>
-                      </button>
-                      <button 
-                        onClick={() => !isLinked && setShowDeleteConfirm(item)} 
-                        disabled={!!activeInventory}
-                        title={isLinked ? "Suppression verrouillée" : "Supprimer"}
-                        className={`p-2.5 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
-                      >
-                        <Trash2 size={18}/>
-                      </button>
-                   </div>
-                 )}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Sous-catégorie</label>
+                <select value={filters.subcategoryId} onChange={e => setFilters({...filters, subcategoryId: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
+                  <option value="">Toutes</option>
+                  {subcategories.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Période (Du)</label>
+                <input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Période (Au)</label>
+                <input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+              </div>
+
+              <div className="md:col-span-4 flex gap-2 pt-2">
+                <button onClick={() => setFilters({ search: '', dateFrom: '', dateTo: '', subcategoryId: '', status: 'ALL' })} className="px-6 py-3 bg-slate-100 text-slate-500 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all w-full">RÉINITIALISER LES FILTRES</button>
               </div>
             </div>
-          );
-        })}
-      </div>
+          )}
+
+      {viewMode === 'CARD' ? (
+        <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+            {loading ? [...Array(6)].map((_, i) => <div key={i} className="h-64 bg-white rounded-[3rem] animate-pulse border border-slate-100"></div>) :
+             filteredStocks.length === 0 ? (
+               <div className="py-20 bg-white rounded-[3rem] border border-dashed border-slate-200 text-center col-span-1 md:col-span-2 xl:col-span-3">
+                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Aucun produit trouvé</p>
+               </div>
+             ) : visibleStocks.map((item) => {
+              const isLinked = isProductLinked(item.id);
+              return (
+                <div key={item.id} className={`bg-white rounded-[3rem] border border-slate-100 shadow-sm hover:shadow-2xl transition-all p-8 flex flex-col group border-b-4 border-transparent hover:border-indigo-500 ${isLinked ? 'grayscale-[0.3]' : ''}`}>
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center transition-transform group-hover:scale-110 shadow-inner overflow-hidden">
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} className="w-full h-full object-cover" alt={item.name} />
+                      ) : (
+                        <Package size={28} />
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border ${item.currentLevel <= item.minThreshold ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                        {item.currentLevel <= item.minThreshold ? 'ALERTE STOCK' : 'EN STOCK'}
+                      </span>
+                      {isLinked && (
+                        <span className="text-[7px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">Ventes liées</span>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="font-black text-slate-900 text-lg uppercase truncate leading-none">{item.name}</h3>
+                  <p className="text-[10px] text-slate-400 font-mono mt-3 truncate font-bold">SKU: {item.sku}</p>
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                       <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Disponible</p>
+                       <p className="text-sm font-black text-slate-900">{item.currentLevel}</p>
+                     </div>
+                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                       <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Prix Unit.</p>
+                       <p className="text-sm font-black text-slate-900">{Number(item.unitPrice).toLocaleString()} {currency}</p>
+                     </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-50">
+                     <button onClick={() => openDetails(item)} className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all">DÉTAILS <Eye size={16}/></button>
+                     {canModify && (
+                       <div className="flex gap-1">
+                          <button 
+                            onClick={() => openEdit(item)} 
+                            disabled={!!activeInventory} 
+                            title={isLinked ? "Modification verrouillée" : "Modifier"}
+                            className={`p-2.5 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                          >
+                            <Edit3 size={18}/>
+                          </button>
+                          <button 
+                            onClick={() => !isLinked && setShowDeleteConfirm(item)} 
+                            disabled={!!activeInventory}
+                            title={isLinked ? "Suppression verrouillée" : "Supprimer"}
+                            className={`p-2.5 rounded-xl transition-all ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                          >
+                            <Trash2 size={18}/>
+                          </button>
+                       </div>
+                     )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredStocks.length > visibleStocks.length && (
+            <div className="flex justify-center mt-6">
+              <button onClick={() => setPageSize(prev => prev + 6)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase tracking-widest">VOIR PLUS</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-[1.5rem] border border-slate-100 shadow-sm overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 text-slate-400 text-[9px] font-black uppercase tracking-widest border-b">
+                <th className="px-6 py-4">Produit</th>
+                <th className="px-6 py-4">SKU</th>
+                <th className="px-6 py-4">Sous-catégorie</th>
+                <th className="px-6 py-4 text-center">Stock</th>
+                <th className="px-6 py-4 text-right">Prix</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? [...Array(6)].map((_, i) => (
+                <tr key={i} className="h-16 bg-slate-50 animate-pulse"><td colSpan={6}></td></tr>
+              )) : filteredStocks.length === 0 ? (
+                <tr><td colSpan={6} className="p-8 text-center text-slate-400">Aucun produit trouvé</td></tr>
+              ) : filteredStocks.map(item => {
+                const isLinked = isProductLinked(item.id);
+                const scName = subcategories.find((s:any) => s.id === (item.subcategoryId || item.subcategory_id))?.name || '';
+                return (
+                  <tr key={item.id} className="group hover:bg-slate-50/50 transition-all">
+                    <td className="px-6 py-4 font-black text-slate-900 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden">{item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" alt="" /> : <Package size={18} />}</div>
+                      <div className="truncate">{item.name}</div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 font-mono">{item.sku}</td>
+                    <td className="px-6 py-4 text-slate-600">{scName}</td>
+                    <td className="px-6 py-4 text-center font-black">{item.currentLevel}</td>
+                    <td className="px-6 py-4 text-right font-black">{Number(item.unitPrice).toLocaleString()} {currency}</td>
+                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                      <button onClick={() => openDetails(item)} className="px-3 py-2 rounded-xl text-slate-400 hover:text-indigo-600">Voir</button>
+                      {canModify && (
+                        <>
+                          <button onClick={() => openEdit(item)} disabled={!!activeInventory} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}><Edit3 size={16} /></button>
+                          <button onClick={() => !isLinked && setShowDeleteConfirm(item)} disabled={!!activeInventory} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={16} /></button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* MODAL CRÉATION / ÉDITION */}
       {(modalMode === 'CREATE' || modalMode === 'EDIT') && (
