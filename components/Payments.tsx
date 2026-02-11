@@ -27,7 +27,7 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
     search: '',
     dateFrom: '',
     dateTo: '',
-    method: 'WAVE',
+    method: 'ALL',
     status: 'ALL',
     minAmount: '',
     maxAmount: '',
