@@ -6,7 +6,7 @@ import {
   CreditCard, ShieldCheck, Terminal, ShieldHalf, Loader2,
   Layers, GitMerge, Wallet, History, TrendingDown, Sparkles
 } from 'lucide-react';
-import { User } from '../types';
+import { User, UserRole } from '../types';
 import { authBridge } from '../services/authBridge';
 
 interface LayoutProps {
@@ -67,6 +67,12 @@ const Layout: React.FC<LayoutProps> = ({
       console.warn('Layout debug failed', e);
     }
   }, [user]);
+
+  const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+  const tenantStatus = (user as any)?.tenant?.paymentStatus;
+  const isTenantOk = !tenantStatus || tenantStatus === 'UP_TO_DATE' || tenantStatus === 'TRIAL';
+  const isTenantLate = !isTenantOk;
+  const isAdminOrSuper = roles.includes(UserRole.ADMIN) || roles.includes(UserRole.SUPER_ADMIN);
 
   return (
     <div className={`flex h-screen ${isSuperAdminMode ? 'bg-slate-950' : 'bg-slate-50'} overflow-hidden transition-colors duration-500`}>
@@ -131,7 +137,20 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
         </header>
-        <div className="p-8">{children}</div>
+        <div className="p-8">
+          {isTenantLate && isAdminOrSuper && (
+            <div className="mb-6 p-6 rounded-2xl border-2 bg-amber-50 border-amber-200 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-tight text-amber-700">Instance en retard de paiement</h4>
+                <p className="text-xs text-amber-700 font-bold">Seul le tableau de bord est accessible. Régularisez votre abonnement pour rétablir l'accès à tous les modules.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setActiveTab('subscription')} className="px-4 py-2 bg-amber-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest">Régulariser</button>
+              </div>
+            </div>
+          )}
+          {children}
+        </div>
       </main>
 
       {showLogoutConfirm && (

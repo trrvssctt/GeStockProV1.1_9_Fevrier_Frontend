@@ -111,6 +111,54 @@ const SuperAdmin = () => {
           }
 
           if (!amount) {
+
+      const handleProcessMonthly = () => {
+        const candidates = (Array.isArray(data?.pendingValidations) ? data.pendingValidations : [])
+          .map((v: any) => ({ tenantId: v.tenantId || v.id, validation: v }));
+
+        // fallback to tenants list when pendingValidations not provided
+        if (candidates.length === 0 && Array.isArray(tenants)) {
+          tenants.forEach(t => {
+            if (!t.subscription || t.subscription?.status !== 'ACTIVE') {
+              candidates.push({ tenantId: t.id, validation: t });
+            }
+          });
+        }
+
+        if (candidates.length === 0) {
+          alert('Aucun abonnement à traiter ce mois.');
+          return;
+        }
+
+        setConfirmAction({
+          title: 'Lancer le traitement mensuel',
+          msg: `Voulez-vous lancer le traitement automatique pour ${candidates.length} instance(s) ? Ceci validera les paiements détectés et mettra à jour les abonnements.`,
+          icon: Clock,
+          type: 'success',
+          action: async () => {
+            setActionLoading(true);
+            try {
+              for (const c of candidates) {
+                const id = c.tenantId;
+                // derive an amount similar to single-validate flow
+                let amount = 0;
+                const tenantRecord = tenants.find(t => t.id === id) || c.validation || {};
+                amount = tenantRecord.subscription?.planDetails?.priceMonthly || tenantRecord.planPrice || tenantRecord.plan?.price || tenantRecord.amount || 0;
+                const reference = `AUTO-BILL-${Date.now()}-${String(id).slice(0,8)}`;
+                await apiClient.post(`/admin/tenants/${id}/subscription/validate`, { amount, method: 'STRIPE', reference, transactionId: reference });
+              }
+              fetchData();
+              setConfirmAction(null);
+              alert('Traitement mensuel terminé.');
+            } catch (err: any) {
+              alert(`Erreur lors du traitement mensuel: ${err?.message || err}`);
+              setConfirmAction(null);
+            } finally {
+              setActionLoading(false);
+            }
+          }
+        });
+      };
             const plan = plans.find((p: any) => p.id === validation?.planId || String(p.id) === String(validation?.planId));
             if (plan) amount = plan.priceMonthly || plan.price || 0;
           }

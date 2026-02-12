@@ -318,9 +318,7 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
                          )}
                        </div>
                        <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center shrink-0">
-                          <button className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-1 group/btn hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all">
-                            VOIR PRODUITS <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
-                          </button>
+                          
                           <span className="text-[8px] font-mono text-slate-300 font-bold uppercase tracking-widest">ID:{cat.id.slice(0,8)}</span>
                        </div>
                     </div>

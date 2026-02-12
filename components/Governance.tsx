@@ -30,6 +30,8 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [targetUserToToggle, setTargetUserToToggle] = useState<User | null>(null);
   
   const [userData, setUserData] = useState({ 
     name: '', 
@@ -64,6 +66,16 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
 
   const handleOpenEdit = (user: User) => {
     const roles = (user as any).roles || [user.role];
+    const isActive = (user as any).isActive ?? (user as any).is_active ?? true;
+    if (roles.includes('ADMIN')) {
+      setError('Modification interdite pour les administrateurs.');
+      return;
+    }
+    if (!isActive) {
+      setError('Impossible de modifier un utilisateur inactif.');
+      return;
+    }
+
     setEditingUser(user);
     setUserData({
       name: user.name,
@@ -111,6 +123,40 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
     setEditingUser(null);
     setUserData({ name: '', email: '', password: '', roles: [] });
     setError(null);
+  };
+
+  // Open confirmation modal before toggling active status
+  const toggleActive = (user: User) => {
+    const roles = (user as any).roles || [user.role];
+    if (roles.includes('ADMIN')) {
+      setError("Impossible de désactiver un administrateur.");
+      return;
+    }
+    setTargetUserToToggle(user);
+    setShowConfirmModal(true);
+  };
+
+  const confirmToggle = async () => {
+    if (!targetUserToToggle) return;
+    setActionLoading(true);
+    try {
+      const u = targetUserToToggle as any;
+      const current = u.isActive ?? u.is_active ?? true;
+      const newStatus = !current;
+      await apiClient.put(`/auth/users/${u.id}`, { isActive: newStatus });
+      await fetchUsers();
+      setShowConfirmModal(false);
+      setTargetUserToToggle(null);
+    } catch (err: any) {
+      setError(err?.message || "Échec de l'opération.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const cancelConfirm = () => {
+    setShowConfirmModal(false);
+    setTargetUserToToggle(null);
   };
 
   const filteredUsers = users.filter(u => 
@@ -166,13 +212,19 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
           <tbody className="divide-y divide-slate-50">
             {filteredUsers.map(u => {
               const roles = (u as any).roles || [u.role];
+              const isActive = (u as any).isActive ?? (u as any).is_active ?? true;
               return (
-                <tr key={u.id} className="hover:bg-slate-50/50 transition-all group">
+                <tr key={u.id} className={`hover:bg-slate-50/50 transition-all group ${!isActive ? 'opacity-60' : ''}`}>
                   <td className="px-10 py-6">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs">{u.name.charAt(0)}</div>
                       <div>
-                        <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{u.name}</p>
+                        <div className="flex items-center gap-3">
+                          <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{u.name}</p>
+                          {!isActive && (
+                            <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-600 text-[9px] font-black uppercase">INACTIF</span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-400 font-bold">{u.email}</p>
                       </div>
                     </div>
@@ -187,8 +239,22 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
                     </div>
                   </td>
                   <td className="px-10 py-6 text-right flex justify-end gap-2">
-                    <button onClick={() => handleOpenEdit(u)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"><Edit3 size={18}/></button>
-                    <button className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18}/></button>
+                    <button
+                      onClick={() => handleOpenEdit(u)}
+                      disabled={roles.includes('ADMIN') || !isActive}
+                      title={roles.includes('ADMIN') ? 'Modification interdite pour les administrateurs' : !isActive ? 'Impossible de modifier un utilisateur inactif' : 'Modifier'}
+                      className={`p-2 transition-colors ${(roles.includes('ADMIN') || !isActive) ? 'text-slate-200 cursor-not-allowed' : 'text-slate-300 hover:text-indigo-600'}`}
+                    >
+                      <Edit3 size={18}/>
+                    </button>
+                    <button
+                      onClick={() => toggleActive(u)}
+                      disabled={actionLoading || roles.includes('ADMIN')}
+                      title={roles.includes('ADMIN') ? "Impossible de désactiver un administrateur" : isActive ? 'Désactiver' : 'Réactiver'}
+                      className={`p-2 transition-colors ${roles.includes('ADMIN') ? 'text-slate-200 cursor-not-allowed' : isActive ? 'text-rose-500 hover:text-rose-600' : 'text-emerald-600 hover:text-emerald-700'}`}
+                    >
+                      {isActive ? <Lock size={18}/> : <Check size={18}/>} 
+                    </button>
                   </td>
                 </tr>
               );
@@ -250,6 +316,19 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
                   {actionLoading ? <RefreshCw className="animate-spin" /> : <>{editingUser ? 'METTRE À JOUR' : 'ACTIVER L\'OPÉRATEUR'} <ArrowRight size={18}/></>}
                 </button>
              </form>
+          </div>
+        </div>
+      )}
+
+      {showConfirmModal && targetUserToToggle && (
+        <div className="fixed inset-0 z-[710] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl p-6">
+            <h4 className="text-lg font-black mb-4">Confirmer l'opération</h4>
+            <p className="text-sm text-slate-600 mb-6">Êtes-vous sûr de vouloir {((targetUserToToggle as any).is_active ?? (targetUserToToggle as any).isActive ?? true) ? 'désactiver' : 'réactiver'} l'utilisateur <strong className="uppercase">{targetUserToToggle.name}</strong> ?</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={cancelConfirm} className="px-4 py-2 rounded-xl border font-black text-[10px] uppercase">Annuler</button>
+              <button onClick={confirmToggle} disabled={actionLoading} className="px-4 py-2 rounded-xl bg-rose-600 text-white font-black text-[10px] uppercase">{actionLoading ? '...' : 'Confirmer'}</button>
+            </div>
           </div>
         </div>
       )}

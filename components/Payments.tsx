@@ -41,7 +41,7 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
   });
   const [exportFormat, setExportFormat] = useState<'PDF' | 'CSV' | 'EXCEL'>('PDF');
 
-  const fetchPayments = async () => {
+    const fetchPayments = async () => {
     setLoading(true);
     try {
       const data = await apiClient.get('/sales'); 

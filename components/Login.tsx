@@ -68,11 +68,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         ? { ...data.user, role: UserRole.SUPER_ADMIN, roles: [UserRole.SUPER_ADMIN], tenantId: 'SYSTEM' }
         : data.user;
 
-      // Bloquer la connexion si l'abonnement n'est pas activé (sauf SuperAdmin)
-      if (mode !== 'SUPERADMIN' && apiUser?.subscription && apiUser.subscription.status !== 'ACTIVE') {
-        setApiError({ message: 'Votre abonnement est en attente de validation par l\'administrateur. Connexion refusée.' } as any);
-        setLoading(false);
-        return;
+      // Bloquer la connexion si le tenant est inactif ou si le paiement n'est pas à jour (sauf SuperAdmin)
+      if (mode !== 'SUPERADMIN') {
+        const tenant = data.user?.tenant;
+        const sub = data.user?.subscription;
+        const tenantInactive = tenant && tenant.isActive === false;
+        const paymentNotUpToDate = tenant && !(tenant.paymentStatus === 'UP_TO_DATE' || tenant.paymentStatus === 'TRIAL');
+
+        if (tenantInactive) {
+          setApiError({ message: 'Instance désactivée. Contactez le support.' } as any);
+          setLoading(false);
+          return;
+        }
+
+        if (paymentNotUpToDate) {
+          const roles = Array.isArray(apiUser?.roles) ? apiUser.roles : [apiUser?.role];
+          const isAdmin = roles && (roles.includes(UserRole.ADMIN) || roles.includes(UserRole.SUPER_ADMIN));
+          if (!isAdmin) {
+            setApiError({ message: 'Accès suspendu : votre paiement n\'est pas à jour.' } as any);
+            setLoading(false);
+            return;
+          }
+          // allow ADMIN to login for remediation; frontend will restrict modules to dashboard only
+        }
+
+        // fallback: si backend fournit subscription et elle est non-active
+        if (sub && sub.status && sub.status !== 'ACTIVE' && sub.status !== 'TRIAL') {
+          setApiError({ message: 'Votre abonnement est en attente de validation. Connexion refusée.' } as any);
+          setLoading(false);
+          return;
+        }
       }
 
       const user = {
@@ -100,10 +125,34 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       const data = await apiClient.post('/auth/mfa/verify', { userId: tempUserId, code: mfaCode });
       const apiUser = data.user;
-      if (apiUser?.subscription && apiUser.subscription.status !== 'ACTIVE') {
-        setApiError({ message: 'Votre abonnement est en attente de validation par l\'administrateur. Connexion refusée.' } as any);
-        setLoading(false);
-        return;
+      if (mode !== 'SUPERADMIN') {
+        const tenant = data.user?.tenant;
+        const sub = data.user?.subscription;
+        const tenantInactive = tenant && tenant.isActive === false;
+        const paymentNotUpToDate = tenant && !(tenant.paymentStatus === 'UP_TO_DATE' || tenant.paymentStatus === 'TRIAL');
+
+        if (tenantInactive) {
+          setApiError({ message: 'Instance désactivée. Contactez le support.' } as any);
+          setLoading(false);
+          return;
+        }
+
+        if (paymentNotUpToDate) {
+          const roles = Array.isArray(apiUser?.roles) ? apiUser.roles : [apiUser?.role];
+          const isAdmin = roles && (roles.includes(UserRole.ADMIN) || roles.includes(UserRole.SUPER_ADMIN));
+          if (!isAdmin) {
+            setApiError({ message: 'Accès suspendu : votre paiement n\'est pas à jour.' } as any);
+            setLoading(false);
+            return;
+          }
+          // allow ADMIN to proceed when tenant payment is late; modules will be gated
+        }
+
+        if (sub && sub.status && sub.status !== 'ACTIVE' && sub.status !== 'TRIAL') {
+          setApiError({ message: 'Votre abonnement est en attente de validation. Connexion refusée.' } as any);
+          setLoading(false);
+          return;
+        }
       }
       const user = {
         ...apiUser,

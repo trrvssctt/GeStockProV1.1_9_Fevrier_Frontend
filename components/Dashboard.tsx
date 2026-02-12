@@ -159,31 +159,49 @@ const Dashboard: React.FC<{ user: User, currency: string, onNavigate?: (tab: str
   // --- LOGIQUE PERFORMANCE EMPLOYES ---
   const staffPerformance = useMemo(() => {
     const perfMap: Record<string, any> = {};
-    
-    // Initialisation
-    usersList.forEach(u => {
-      perfMap[u.name] = { name: u.name, role: u.role, salesCount: 0, movCount: 0, score: 0 };
+
+    // Helper to ensure an operator is present in the map
+    const ensureOp = (name: string | null, role: string | null = 'EMPLOYEE') => {
+      const key = (name || 'UNKNOWN').toString();
+      if (!perfMap[key]) {
+        perfMap[key] = { name: key, role: role || 'EMPLOYEE', salesCount: 0, movCount: 0, score: 0 };
+      }
+      return perfMap[key];
+    };
+
+    // Seed from known users (recent users list) so we show proper display names/roles
+    usersList.forEach((u: any) => {
+      if (!u || !u.name) return;
+      perfMap[u.name] = { name: u.name, role: u.role || 'EMPLOYEE', salesCount: 0, movCount: 0, score: 0 };
     });
 
-    // Score par ventes (scellées par l'opérateur si tracé, sinon simulation via flux)
-    sales.forEach(s => {
-      const op = s.operator || 'Admin';
-      if (perfMap[op]) perfMap[op].salesCount += 1;
+    // Accumulate from sales (use operator field or operatorName)
+    sales.forEach((s: any) => {
+      const op = s.operator || s.operatorName || (s.operatorId ? `user-${s.operatorId}` : null) || 'SYSTEM';
+      const entry = ensureOp(op, 'SALES');
+      entry.salesCount += 1;
     });
 
-    // Score par mouvements stock
-    movements.forEach(m => {
-      const op = m.userRef || 'Admin';
-      if (perfMap[op]) perfMap[op].movCount += 1;
+    // Accumulate from movements (use userRef or userName)
+    movements.forEach((m: any) => {
+      const op = m.userRef || m.userName || m.user || 'SYSTEM';
+      const entry = ensureOp(op, 'STOCK_MANAGER');
+      entry.movCount += 1;
     });
 
-    // Calcul score global pondéré
-    return Object.values(perfMap)
-      .map((u: any) => ({
-        ...u,
-        score: (u.salesCount * 10) + (u.movCount * 2)
-      }))
-      .sort((a, b) => b.score - a.score);
+    // Convert to array and compute weighted score
+    const arr = Object.values(perfMap).map((u: any) => ({
+      ...u,
+      score: (Number(u.salesCount || 0) * 10) + (Number(u.movCount || 0) * 2)
+    }));
+
+    // Sort by score desc, then by salesCount
+    arr.sort((a: any, b: any) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return (b.salesCount || 0) - (a.salesCount || 0);
+    });
+
+    return arr;
   }, [usersList, sales, movements]);
 
   // --- LOGIQUE DE CALCULS SALES & FINANCE ---

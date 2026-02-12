@@ -52,6 +52,8 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
   const customersAllowed = authBridge.isCreationAllowed(user, 'customers', customers.length);
   const isCustomersLimitReached = !customersAllowed;
   const currentPlanId = (plan?.id || (user as any).planId || 'BASIC') as string;
+  const roles = Array.isArray(user.roles) ? user.roles : user.role ? [user.role] : [];
+  const isAccountant = roles.includes('ACCOUNTANT');
   
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -120,6 +122,10 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
   };
 
   const openEdit = (customer: Customer) => {
+    if (isAccountant) {
+      alert('Accès lecture seule : modifications non autorisées pour votre rôle.');
+      return;
+    }
     if (hasLinkedSales(customer.id)) {
       alert("Modification bloquée : Ce client possède un historique de ventes.");
       return;
@@ -221,7 +227,7 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
             <button onClick={() => setViewMode('LIST')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'LIST' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>LISTE</button>
           </div>
           <button onClick={() => setShowFilters(s => !s)} className={`p-3 rounded-xl text-[10px] font-black uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>{showFilters ? 'Masquer filtres' : 'Filtres'}</button>
-          {canModify && (
+          {canModify && !isAccountant && (
             isCustomersLimitReached ? (
               <div className="flex items-center gap-3 px-6 py-4 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 text-[10px] font-black uppercase tracking-widest shadow-sm">
                 <Lock size={16} /> {currentPlanId === 'PRO' ? 'Limite du plan PRO atteinte : maximum 12 clients.' : 'Limite du plan Basic atteinte : maximum 5 clients.'}
@@ -339,7 +345,7 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
                     
                     <div className="mt-8 flex justify-between gap-2 border-t pt-6">
                       <button onClick={() => openDetails(customer)} className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2 hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all">DÉTAILS <Eye size={16} /></button>
-                      {canModify && (
+                      {canModify && !isAccountant && (
                         <div className="flex gap-2">
                           <button 
                             onClick={() => openEdit(customer)} 
@@ -392,7 +398,7 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
                       <td className="px-6 py-4 text-right font-black">{(customer.outstandingBalance || 0).toLocaleString()} {currency}</td>
                       <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                         <button onClick={() => openDetails(customer)} className="px-3 py-2 rounded-xl text-slate-400 hover:text-indigo-600">Voir</button>
-                        {canModify && (
+                        {canModify && !isAccountant && (
                           <>
                             <button onClick={() => openEdit(customer)} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}><Edit3 size={16} /></button>
                             <button onClick={() => !isLinked && setShowDeleteConfirm(customer)} className={`px-3 py-2 rounded-xl ${isLinked ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={16} /></button>
