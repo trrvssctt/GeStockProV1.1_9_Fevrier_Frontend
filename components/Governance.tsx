@@ -14,7 +14,7 @@ const AVAILABLE_ROLES = [
   { id: 'STOCK_MANAGER', label: 'Gestionnaire Stock', desc: 'Contrôle logistique et inventaire.' },
   { id: 'ACCOUNTANT', label: 'Comptable', desc: 'Gestion financière et facturation.' },
   { id: 'SALES', label: 'Commercial', desc: 'Gestion des ventes et des clients.' },
-  { id: 'EMPLOYEE', label: 'Employé', desc: 'Accès standard et consultations.' },
+  //{ id: 'EMPLOYEE', label: 'Employé', desc: 'Accès standard et consultations.' },
 ];
 
 interface GovernanceProps {
