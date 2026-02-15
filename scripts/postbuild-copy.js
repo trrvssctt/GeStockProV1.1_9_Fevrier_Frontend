@@ -1,5 +1,8 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const distIndex = path.resolve(__dirname, '..', 'dist', 'index.html');
 const dist200 = path.resolve(__dirname, '..', 'dist', '200.html');
