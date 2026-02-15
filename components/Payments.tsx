@@ -21,6 +21,8 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
   const [pageSize, setPageSize] = useState<number>(30);
   const [showExportModal, setShowExportModal] = useState(false);
   const [settings, setSettings] = useState<any>(tenantSettings || null);
+  const [exportFormat, setExportFormat] = useState<'IMAGE' | 'EXCEL'>('IMAGE');
+  const [imageFormat, setImageFormat] = useState<'PNG' | 'JPG'>('PNG');
   
   // États des filtres
   const [filters, setFilters] = useState({
@@ -39,8 +41,6 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
     from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0]
   });
-  const [exportFormat, setExportFormat] = useState<'PDF' | 'CSV' | 'EXCEL'>('PDF');
-
     const fetchPayments = async () => {
     setLoading(true);
     try {
@@ -74,30 +74,27 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
     fetchPayments();
   }, []);
 
-  const filteredPayments = useMemo(() => {
-    return payments.filter(p => {
-      const pAmount = parseFloat(p.amount);
-      const pDate = new Date(p.createdAt).toISOString().split('T')[0];
-      
-      const matchesSearch = p.saleRef.toLowerCase().includes(filters.search.toLowerCase()) || 
-                           p.customer.toLowerCase().includes(filters.search.toLowerCase());
-      const matchesMethod = filters.method === 'ALL' || p.method === filters.method;
-      const matchesStatus = filters.status === 'ALL' || p.saleStatus === filters.status;
-      const matchesMin = filters.minAmount === '' || pAmount >= parseFloat(filters.minAmount);
-      const matchesMax = filters.maxAmount === '' || pAmount <= parseFloat(filters.maxAmount);
-      const matchesDateFrom = filters.dateFrom === '' || pDate >= filters.dateFrom;
-      const matchesDateTo = filters.dateTo === '' || pDate <= filters.dateTo;
-
-      return matchesSearch && matchesMethod && matchesStatus && matchesMin && matchesMax && matchesDateFrom && matchesDateTo;
-    });
-  }, [payments, filters]);
-
   const exportPreviewData = useMemo(() => {
     return payments.filter(p => {
       const pDate = new Date(p.createdAt).toISOString().split('T')[0];
       return pDate >= exportDates.from && pDate <= exportDates.to;
     });
   }, [payments, exportDates]);
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter(p => {
+      const pAmount = parseFloat(p.amount);
+      const pDate = new Date(p.createdAt).toISOString().split('T')[0];
+      const matchesSearch = (p.saleRef || '').toLowerCase().includes(filters.search.toLowerCase()) || (p.customer || '').toLowerCase().includes(filters.search.toLowerCase());
+      const matchesMethod = filters.method === 'ALL' || p.method === filters.method;
+      const matchesStatus = filters.status === 'ALL' || p.saleStatus === filters.status;
+      const matchesMin = filters.minAmount === '' || pAmount >= parseFloat(filters.minAmount || '0');
+      const matchesMax = filters.maxAmount === '' || pAmount <= parseFloat(filters.maxAmount || '0');
+      const matchesDateFrom = filters.dateFrom === '' || pDate >= filters.dateFrom;
+      const matchesDateTo = filters.dateTo === '' || pDate <= filters.dateTo;
+      return matchesSearch && matchesMethod && matchesStatus && matchesMin && matchesMax && matchesDateFrom && matchesDateTo;
+    });
+  }, [payments, filters]);
 
   const displayedPayments = useMemo(() => {
     if (pageSize === -1) return filteredPayments;
@@ -111,31 +108,72 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
     return { total, cash, digital, count: filteredPayments.length };
   }, [filteredPayments]);
 
-  const handleExport = () => {
-    if (exportFormat === 'CSV' || exportFormat === 'EXCEL') {
-      const headers = ['Date', 'Heure', 'Reference', 'Client', 'Methode', 'Montant', 'Etat'];
-      const rows = exportPreviewData.map(p => [
-        new Date(p.createdAt).toLocaleDateString(),
-        new Date(p.createdAt).toLocaleTimeString(),
-        p.saleRef,
-        p.customer,
-        p.method,
-        p.amount,
-        p.saleStatus
-      ]);
+  const loadHtml2Canvas = async () => {
+    if ((window as any).html2canvas) return (window as any).html2canvas;
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Chargement html2canvas échoué'));
+      document.head.appendChild(s);
+    });
+    return (window as any).html2canvas;
+  };
 
-      const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", `export_tresorerie_${exportDates.from}_${exportDates.to}.${exportFormat === 'CSV' ? 'csv' : 'xls'}`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const exportAsImage = async () => {
+    try {
+      const html2canvas = await loadHtml2Canvas();
+      const node = document.getElementById('export-preview');
+      if (!node) throw new Error('Aperçu introuvable pour export image');
+      const canvas: HTMLCanvasElement = await html2canvas(node as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const mime = imageFormat === 'PNG' ? 'image/png' : 'image/jpeg';
+      canvas.toBlob((blob: Blob | null) => {
+        if (!blob) return alert('Impossible de générer l\'image');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export_tresorerie_${exportDates.from}_${exportDates.to}.${imageFormat === 'PNG' ? 'png' : 'jpg'}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }, mime, imageFormat === 'JPG' ? 0.92 : 0.95);
+    } catch (err: any) {
+      console.error('Export image failed', err);
+      alert(err?.message || 'Erreur export image');
+    }
+  };
+
+  const exportAsExcel = () => {
+    // Fallback simple CSV saved as .xls for Excel compatibility
+    const headers = ['Date', 'Heure', 'Reference', 'Client', 'Methode', 'Montant', 'Etat'];
+    const rows = exportPreviewData.map(p => [
+      new Date(p.createdAt).toLocaleDateString(),
+      new Date(p.createdAt).toLocaleTimeString(),
+      p.saleRef,
+      p.customer,
+      p.method,
+      p.amount,
+      p.saleStatus
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `export_tresorerie_${exportDates.from}_${exportDates.to}.xls`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExport = async () => {
+    if (exportFormat === 'IMAGE') {
+      await exportAsImage();
     } else {
-      window.print();
+      exportAsExcel();
     }
   };
 
@@ -467,24 +505,36 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Format de Sortie</label>
                       <div className="grid grid-cols-1 gap-3">
                          {[
-                           { id: 'PDF', label: 'Document PDF (Certifié)', icon: FileText, color: 'text-rose-500', bg: 'bg-rose-50' },
-                           { id: 'CSV', label: 'Données brutes CSV', icon: FileSpreadsheet, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                           { id: 'EXCEL', label: 'Feuille Excel (XLS)', icon: RefreshCw, color: 'text-blue-500', bg: 'bg-blue-50' }
-                         ].map(fmt => (
-                           <button 
-                             key={fmt.id}
-                             onClick={() => setExportFormat(fmt.id as any)}
-                             className={`p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${exportFormat === fmt.id ? 'border-indigo-600 bg-white shadow-lg shadow-indigo-50' : 'border-white bg-white/50 hover:border-slate-200'}`}
-                           >
-                             <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 ${fmt.bg} ${fmt.color} rounded-xl flex items-center justify-center shadow-inner`}>
-                                   <fmt.icon size={20} />
-                                </div>
-                                <span className={`text-[10px] font-black uppercase ${exportFormat === fmt.id ? 'text-indigo-600' : 'text-slate-500'}`}>{fmt.label}</span>
+                           { id: 'IMAGE', label: 'Image (PNG / JPG)', icon: FileText, color: 'text-rose-500', bg: 'bg-rose-50' },
+                           { id: 'EXCEL', label: 'Feuille Excel (XLS)', icon: FileSpreadsheet, color: 'text-blue-500', bg: 'bg-blue-50' }
+                         ].map(fmt => {
+                           const Icon = fmt.icon as any;
+                           const keyId = fmt.id === 'IMAGE' ? 'IMAGE' : 'EXCEL';
+                           return (
+                             <div key={fmt.id} className="relative">
+                               <button
+                                 onClick={() => setExportFormat(keyId as any)}
+                                 className={`p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${exportFormat === keyId ? 'border-indigo-600 bg-white shadow-lg shadow-indigo-50' : 'border-white bg-white/50 hover:border-slate-200'}`}
+                               >
+                                 <div className="flex items-center gap-4">
+                                   <div className={`w-10 h-10 ${fmt.bg} ${fmt.color} rounded-xl flex items-center justify-center shadow-inner`}>
+                                     <Icon size={20} />
+                                   </div>
+                                   <span className={`text-[10px] font-black uppercase ${exportFormat === keyId ? 'text-indigo-600' : 'text-slate-500'}`}>{fmt.label}</span>
+                                 </div>
+                                 {exportFormat === keyId && <CheckCircle2 className="text-indigo-600" size={18} />}
+                               </button>
+                               {fmt.id === 'IMAGE' && exportFormat === 'IMAGE' && (
+                                 <div className="absolute right-0 top-full mt-2 flex items-center gap-2">
+                                   <select value={imageFormat} onChange={e => setImageFormat(e.target.value as any)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black">
+                                     <option value="PNG">PNG</option>
+                                     <option value="JPG">JPG</option>
+                                   </select>
+                                 </div>
+                               )}
                              </div>
-                             {exportFormat === fmt.id && <CheckCircle2 className="text-indigo-600" size={18} />}
-                           </button>
-                         ))}
+                           );
+                         })}
                       </div>
                     </div>
                     
@@ -513,8 +563,8 @@ const Payments = ({ currency, tenantSettings }: { currency: string, tenantSettin
                     <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Visualisation Dynamique</span>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-slate-100/30">
-                    <div id="export-preview" className="bg-white p-12 w-[210mm] min-h-[297mm] mx-auto text-slate-800 shadow-xl border border-slate-200 font-sans scale-90 origin-top">
+                  <div className="flex-1 overflow-y-auto p-6 lg:p-12 custom-scrollbar bg-slate-100/30">
+                    <div id="export-preview" className="bg-white p-6 lg:p-12 w-full lg:w-[210mm] min-h-[297mm] mx-auto text-slate-800 shadow-xl border border-slate-200 font-sans lg:scale-90 scale-100 origin-top">
                       {/* Logo et Header Preview */}
                       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-10">
                         <div>
