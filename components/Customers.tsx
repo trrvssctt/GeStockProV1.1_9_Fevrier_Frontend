@@ -59,10 +59,15 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showEditModal) return;
-    setActionLoading(true);
     setError(null);
+    if (!formData.phone || !formData.mainContact) {
+      setError('Le numéro de téléphone et le nom du responsable sont obligatoires.');
+      return;
+    }
+    setActionLoading(true);
     try {
-      const updated = await apiClient.put(`/customers/${showEditModal.id}`, formData);
+      const payload = { ...formData, companyName: formData.companyName && String(formData.companyName).trim() !== '' ? formData.companyName : formData.mainContact };
+      const updated = await apiClient.put(`/customers/${showEditModal.id}`, payload);
       setCustomers(prev => prev.map(c => c.id === updated.id ? updated : c));
       setShowEditModal(null);
       resetForm();
@@ -75,8 +80,12 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionLoading(true);
     setError(null);
+    if (!formData.phone || !formData.mainContact) {
+      setError('Le numéro de téléphone et le nom du responsable sont obligatoires.');
+      return;
+    }
+    setActionLoading(true);
     try {
       if (!authBridge.isCreationAllowed(user, 'customers', customers.length)) {
         if (currentPlanId === 'PRO') setError('Limite du plan PRO atteinte : maximum 12 clients.');
@@ -84,7 +93,8 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
         setActionLoading(false);
         return;
       }
-      const data = await apiClient.post('/customers', formData);
+      const payload = { ...formData, companyName: formData.companyName && String(formData.companyName).trim() !== '' ? formData.companyName : formData.mainContact };
+      const data = await apiClient.post('/customers', payload);
       setCustomers([data, ...customers]);
       setShowCreateModal(false);
       resetForm();
@@ -432,9 +442,9 @@ const Customers: React.FC<CustomersProps> = ({ user, currency, plan }) => {
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Identité Entreprise</label>
                       <input type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Raison Sociale (optionnel)" />
-                      <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Email de contact" />
-                      <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Téléphone" />
-                      <input type="text" value={formData.mainContact} onChange={e => setFormData({...formData, mainContact: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Nom du responsable" />
+                      <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Email de contact (optionnel)" />
+                      <input type="text" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Téléphone (obligatoire)" />
+                      <input type="text" required value={formData.mainContact} onChange={e => setFormData({...formData, mainContact: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black focus:ring-4 focus:ring-indigo-500/10 outline-none" placeholder="Nom du responsable (obligatoire)" />
                    </div>
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Logistique & Crédit</label>
