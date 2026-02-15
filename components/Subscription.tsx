@@ -38,6 +38,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
 
   // État pour l'aperçu de facture d'abonnement
   const [showDocGenerator, setShowDocGenerator] = useState<{ sale: any, mode: 'SUBSCRIPTION_INVOICE' } | null>(null);
+  const [pageSize, setPageSize] = useState<number>(25);
 
   const isAdmin = user.roles?.includes(UserRole.ADMIN) || user.role === UserRole.ADMIN;
 
@@ -63,6 +64,12 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
 
   const currentSubscription = subscriptionData?.subscription;
   const paymentHistory = subscriptionData?.payments || [];
+
+  const displayedPayments = useMemo(() => {
+    if (!paymentHistory) return [];
+    if (pageSize === -1) return paymentHistory;
+    return paymentHistory.slice(0, pageSize);
+  }, [paymentHistory, pageSize]);
 
   const currentPlan = useMemo(() => {
     return availablePlans.find(p => p.id === currentSubscription?.planId) || availablePlans[0] || SUBSCRIPTION_PLANS[0];
@@ -277,7 +284,19 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
               <History className="text-indigo-600" /> Historique des règlements
             </h2>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{paymentHistory.length} Transactions</span>
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{paymentHistory.length} Transactions</span>
+              <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
+                Afficher
+                <select value={pageSize} onChange={e => setPageSize(parseInt(e.target.value))} className="ml-2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black outline-none">
+                  <option value={5}>5</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={-1}>Tous</option>
+                </select>
+              </label>
+            </div>
          </div>
 
          <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
@@ -293,9 +312,9 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                </thead>
                <tbody className="divide-y divide-slate-50">
                   {paymentHistory.length === 0 ? (
-                     <tr><td colSpan={5} className="py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">Aucun paiement d'abonnement tracé</td></tr>
-                  ) : paymentHistory.map((p: any) => (
-                     <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
+                    <tr><td colSpan={5} className="py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">Aucun paiement d'abonnement tracé</td></tr>
+                  ) : displayedPayments.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
                         <td className="px-10 py-6">
                            <p className="text-sm font-black text-slate-900">{new Date(p.paymentDate || p.createdAt).toLocaleDateString('fr-FR')}</p>
                            <p className="text-[10px] text-slate-400 font-bold">{new Date(p.paymentDate || p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
