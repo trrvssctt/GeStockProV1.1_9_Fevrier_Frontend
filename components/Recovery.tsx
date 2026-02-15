@@ -16,6 +16,9 @@ const Recovery = ({ currency }: { currency: string }) => {
   const [showEmailModal, setShowEmailModal] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [emailContent, setEmailContent] = useState({ subject: '', body: '' });
+  const [showRemindersModal, setShowRemindersModal] = useState(false);
+  const [selectedDebtors, setSelectedDebtors] = useState<string[]>([]);
+  const [perPage, setPerPage] = useState<number | 'ALL'>(25);
 
   const fetchDebtors = async () => {
     setLoading(true);
@@ -66,6 +69,11 @@ const Recovery = ({ currency }: { currency: string }) => {
     (d.email || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const displayedDebtors = useMemo(() => {
+    if (perPage === 'ALL') return filteredDebtors;
+    return filteredDebtors.slice(0, perPage as number);
+  }, [filteredDebtors, perPage]);
+
   const handleWhatsApp = (customer: any) => {
     if (!customer.phone) return alert("Numéro de téléphone manquant pour ce client.");
     const message = `Bonjour ${customer.companyName}, nous vous contactons concernant votre solde client de ${customer.outstandingBalance.toLocaleString()} ${currency} dans notre établissement. Merci de nous recontacter pour la régularisation.`;
@@ -78,6 +86,32 @@ const Recovery = ({ currency }: { currency: string }) => {
     
     setEmailContent({ subject, body });
     setShowEmailModal(customer);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedDebtors(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (list: any[]) => {
+    const allIds = list.map(d => d.id).filter(Boolean);
+    setSelectedDebtors(prev => {
+      const allSelected = allIds.every(id => prev.includes(id));
+      return allSelected ? [] : allIds;
+    });
+  };
+
+  const sendSelectedViaGmail = (list: any[]) => {
+    const targets = list.filter(d => selectedDebtors.includes(d.id));
+    if (targets.length === 0) return alert('Aucun destinataire sélectionné.');
+    targets.forEach((t: any) => {
+      const subject = `Relance de paiement - ${t.companyName}`;
+      const body = `Bonjour ${t.companyName},\n\nSauf erreur de notre part, votre compte client présente un solde débiteur de ${t.outstandingBalance.toLocaleString()} ${currency}.\n\nNous vous remercions de bien vouloir régulariser cette situation dans les plus brefs délais.\n\nRestant à votre disposition,\nL'équipe administrative.`;
+      const to = t.email;
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(gmailUrl, '_blank');
+    });
+    setShowRemindersModal(false);
+    setSelectedDebtors([]);
   };
 
   const sendViaGmail = () => {
@@ -102,9 +136,12 @@ const Recovery = ({ currency }: { currency: string }) => {
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dossiers à Recouvrer</p>
              <h3 className="text-2xl font-black text-slate-900">{stats.count} Clients</h3>
            </div>
-           <button onClick={fetchDebtors} className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-inner">
-             <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-          </button>
+           <div className="flex items-center gap-3">
+             <button onClick={() => setShowRemindersModal(true)} className="px-4 py-3 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all">Envoyer Rappels</button>
+             <button onClick={fetchDebtors} className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-inner">
+               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+             </button>
+           </div>
         </div>
         <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl flex items-center gap-6">
            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md"><TrendingDown size={24}/></div>
@@ -114,9 +151,21 @@ const Recovery = ({ currency }: { currency: string }) => {
 
       <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-50 bg-slate-50/30">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input type="text" placeholder="Filtrer par nom client ou email..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm" />
+          <div className="relative flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input type="text" placeholder="Filtrer par nom client ou email..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-black text-slate-500">Afficher</label>
+              <select value={perPage} onChange={e => setPerPage(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value))} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-black outline-none">
+                <option value={5}>5</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={'ALL'}>Tous</option>
+              </select>
+            </div>
           </div>
         </div>
         {loading ? (
@@ -137,7 +186,7 @@ const Recovery = ({ currency }: { currency: string }) => {
               <tbody className="divide-y divide-slate-50">
                 {filteredDebtors.length === 0 ? (
                   <tr><td colSpan={3} className="py-20 text-center font-black text-slate-300 uppercase text-[10px]">Aucun impayé détecté</td></tr>
-                ) : filteredDebtors.map((d: any) => (
+                ) : displayedDebtors.map((d: any) => (
                   <tr key={d.id} className="hover:bg-slate-50/50 transition-all group">
                     <td className="px-10 py-6">
                       <p className="text-sm font-black text-slate-800 uppercase">{d.companyName}</p>
@@ -149,12 +198,15 @@ const Recovery = ({ currency }: { currency: string }) => {
                     </td>
                     <td className="px-10 py-6 text-right space-x-2">
                        <button onClick={() => handleWhatsApp(d)} className="p-3 bg-white border border-slate-100 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl shadow-sm transition-all" title="Relancer via WhatsApp"><MessageCircle size={18} /></button>
-                       <button onClick={() => openEmailPreview(d)} className="p-3 bg-white border border-slate-100 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl shadow-sm transition-all" title="Relancer par Email"><Mail size={18} /></button>
+                       {d.email && (
+                         <button onClick={() => openEmailPreview(d)} className="p-3 bg-white border border-slate-100 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl shadow-sm transition-all" title="Relancer par Email"><Mail size={18} /></button>
+                       )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <div className="p-4 text-xs text-slate-500 font-black flex justify-end">Affichage {displayedDebtors.length} sur {filteredDebtors.length} résultats</div>
           </div>
         )}
       </div>
@@ -200,6 +252,61 @@ const Recovery = ({ currency }: { currency: string }) => {
                  </div>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* MODAL: SEND REMINDERS */}
+      {showRemindersModal && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
+            <div className="px-8 py-6 bg-indigo-600 text-white flex items-center justify-between">
+              <h3 className="font-black uppercase">Envoyer des rappels</h3>
+              <button onClick={() => { setShowRemindersModal(false); setSelectedDebtors([]); }} className="p-3 rounded-2xl hover:bg-white/10"><X size={20} /></button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <input id="select-all" type="checkbox" className="w-4 h-4" onChange={() => toggleSelectAll(debtors.filter(d => d.email))} checked={debtors.filter(d => d.email).every(d => selectedDebtors.includes(d.id)) && debtors.filter(d => d.email).length>0} />
+                  <label htmlFor="select-all" className="text-sm font-black">Sélectionner tous ({debtors.filter(d => d.email).length})</label>
+                </div>
+                <div className="text-sm text-slate-500">Clients avec email seulement affichés</div>
+              </div>
+              <div className="max-h-80 overflow-y-auto border rounded-2xl">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-400 text-[11px] font-black uppercase tracking-widest border-b">
+                      <th className="px-6 py-3"> </th>
+                      <th className="px-6 py-3">Client</th>
+                      <th className="px-6 py-3">Email</th>
+                      <th className="px-6 py-3 text-right">Montant dû</th>
+                      <th className="px-6 py-3"> </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {debtors.filter(d => d.email).length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-400 font-black text-sm">Aucun débiteur avec email trouvé</td></tr>
+                    ) : debtors.filter(d => d.email).map((d: any) => (
+                      <tr key={d.id} className="hover:bg-slate-50/50 transition-all">
+                        <td className="px-6 py-4">
+                          <input type="checkbox" checked={selectedDebtors.includes(d.id)} onChange={() => toggleSelect(d.id)} className="w-4 h-4" />
+                        </td>
+                        <td className="px-6 py-4 font-black text-sm">{d.companyName}</td>
+                        <td className="px-6 py-4 text-sm text-slate-500">{d.email}</td>
+                        <td className="px-6 py-4 text-right font-black text-rose-600">{d.outstandingBalance.toLocaleString()} <span className="text-xs text-slate-400">{currency}</span></td>
+                        <td className="px-6 py-4 text-right">
+                          <button onClick={() => { openEmailPreview(d); setShowRemindersModal(false); }} className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-slate-700 hover:bg-indigo-600 hover:text-white transition-all">Voir l'aperçu</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-4 mt-6">
+                <button onClick={() => { setShowRemindersModal(false); setSelectedDebtors([]); }} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black">ANNULER</button>
+                <button onClick={() => sendSelectedViaGmail(debtors)} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black">ENVOYER VIA GMAIL</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
