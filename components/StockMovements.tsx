@@ -5,6 +5,7 @@ import {
   History, TrendingUp, Filter, Calendar, X, Check, Boxes,
   Loader2, ArrowRight, Package, User as UserIcon, SlidersHorizontal,
   Download, FileText, Printer, MapPin, Phone, Mail, ShieldAlert, Lock,
+  FileSpreadsheet,
   CheckCircle2, Info, Trash2, ChevronDown
 } from 'lucide-react';
 import { 
@@ -24,6 +25,13 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
   const [activeInventory, setActiveInventory] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [perPage, setPerPage] = useState<string>('25');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'IMAGE' | 'EXCEL'>('IMAGE');
+  const [imageFormat, setImageFormat] = useState<'PNG' | 'JPG'>('PNG');
+  const [exportDates, setExportDates] = useState({
+    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0]
+  });
   
   const [filters, setFilters] = useState({
     search: '', 
@@ -130,6 +138,81 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
     return filteredMovements.slice(0, n);
   }, [filteredMovements, perPage]);
 
+  const exportPreviewData = useMemo(() => {
+    return movements.filter((m: any) => {
+      const d = new Date(m.createdAt).toISOString().split('T')[0];
+      return d >= exportDates.from && d <= exportDates.to;
+    });
+  }, [movements, exportDates]);
+
+  const loadHtml2Canvas = async () => {
+    if ((window as any).html2canvas) return (window as any).html2canvas;
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Chargement html2canvas échoué'));
+      document.head.appendChild(s);
+    });
+    return (window as any).html2canvas;
+  };
+
+  const exportAsImage = async () => {
+    try {
+      const html2canvas = await loadHtml2Canvas();
+      const node = document.getElementById('export-preview-stock');
+      if (!node) throw new Error('Aperçu introuvable pour export image');
+      const canvas: HTMLCanvasElement = await html2canvas(node as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const mime = imageFormat === 'PNG' ? 'image/png' : 'image/jpeg';
+      canvas.toBlob((blob: Blob | null) => {
+        if (!blob) return alert('Impossible de générer l\'image');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export_stock_${exportDates.from}_${exportDates.to}.${imageFormat === 'PNG' ? 'png' : 'jpg'}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }, mime, imageFormat === 'JPG' ? 0.92 : 0.95);
+    } catch (err: any) {
+      console.error('Export image failed', err);
+      alert(err?.message || 'Erreur export image');
+    }
+  };
+
+  const exportAsExcel = () => {
+    const headers = ['Date','Heure','Article','SKU','Type','Quantité','Opérateur'];
+    const rows = exportPreviewData.map((m: any) => {
+      const p = m.stock_item || m.stockItem || m.StockItem || {};
+      return [
+        new Date(m.createdAt).toLocaleDateString(),
+        new Date(m.createdAt).toLocaleTimeString(),
+        p.name || 'N/A',
+        p.sku || 'N/A',
+        m.type,
+        m.qty,
+        m.userRef || ''
+      ];
+    });
+    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `export_stock_${exportDates.from}_${exportDates.to}.xls`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExport = async () => {
+    if (exportFormat === 'IMAGE') await exportAsImage(); else exportAsExcel();
+    setShowExportModal(false);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20 relative">
       {activeInventory && (
@@ -218,6 +301,9 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
           <button onClick={fetchData} className="p-4 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-sm">
              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
           </button>
+          <button onClick={() => setShowExportModal(true)} className="px-4 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl hover:bg-emerald-700">
+            <Download size={16} /> EXPORTER
+          </button>
         </div>
       </div>
 
@@ -291,7 +377,7 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                    <th className="px-10 py-6 text-center">Action</th>
                    <th className="px-10 py-6 text-right">Mouvement</th>
                    <th className="px-10 py-6 text-right">Opérateur</th>
-                   <th className="px-10 py-6 text-right">Solde Final</th>
+                   <th className="px-10 py-6 text-right">Stock Final</th>
                 </tr>
              </thead>
              <tbody className="divide-y divide-slate-50">
@@ -335,6 +421,174 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
           </table>
         </div>
       </div>
+
+      {showExportModal && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300 print:hidden">
+          <div className="bg-white w-full max-w-6xl rounded-[4rem] shadow-2xl overflow-hidden flex flex-col h-[90vh] animate-in zoom-in-95 duration-500">
+             <div className="px-10 py-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-4">
+                  <Download className="text-emerald-500" size={28}/>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Exportation Stratégique des Mouvements</h3>
+                </div>
+                <button onClick={() => setShowExportModal(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><X size={24}/></button>
+             </div>
+             
+             <div className="flex-1 overflow-hidden grid grid-cols-12">
+                <div className="col-span-12 lg:col-span-4 border-r border-slate-100 flex flex-col bg-slate-50/50">
+                  <div className="p-8 space-y-8 flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Période du Rapport</label>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                          <input 
+                            type="date" 
+                            value={exportDates.from} 
+                            onChange={e => setExportDates({...exportDates, from: e.target.value})}
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-4 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
+                          />
+                        </div>
+                        <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                          <input 
+                            type="date" 
+                            value={exportDates.to} 
+                            onChange={e => setExportDates({...exportDates, to: e.target.value})}
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-4 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Format de Sortie</label>
+                      <div className="grid grid-cols-1 gap-3">
+                         {[
+                           { id: 'IMAGE', label: 'Image (PNG / JPG)', icon: FileText, color: 'text-rose-500', bg: 'bg-rose-50' },
+                           { id: 'EXCEL', label: 'Feuille Excel (XLS)', icon: FileSpreadsheet, color: 'text-blue-500', bg: 'bg-blue-50' }
+                         ].map(fmt => {
+                           const Icon = fmt.icon as any;
+                           const keyId = fmt.id === 'IMAGE' ? 'IMAGE' : 'EXCEL';
+                           return (
+                             <div key={fmt.id} className="relative">
+                               <button
+                                 onClick={() => setExportFormat(keyId as any)}
+                                 className={`p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${exportFormat === keyId ? 'border-indigo-600 bg-white shadow-lg shadow-indigo-50' : 'border-white bg-white/50 hover:border-slate-200'}`}
+                               >
+                                 <div className="flex items-center gap-4">
+                                   <div className={`w-10 h-10 ${fmt.bg} ${fmt.color} rounded-xl flex items-center justify-center shadow-inner`}>
+                                     <Icon size={20} />
+                                   </div>
+                                   <span className={`text-[10px] font-black uppercase ${exportFormat === keyId ? 'text-indigo-600' : 'text-slate-500'}`}>{fmt.label}</span>
+                                 </div>
+                                 {exportFormat === keyId && <CheckCircle2 className="text-indigo-600" size={18} />}
+                               </button>
+                               {fmt.id === 'IMAGE' && exportFormat === 'IMAGE' && (
+                                 <div className="absolute right-0 top-full mt-2 flex items-center gap-2">
+                                   <select value={imageFormat} onChange={e => setImageFormat(e.target.value as any)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black">
+                                     <option value="PNG">PNG</option>
+                                     <option value="JPG">JPG</option>
+                                   </select>
+                                 </div>
+                               )}
+                             </div>
+                           );
+                         })}
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100">
+                       <p className="text-[9px] text-indigo-700 font-bold uppercase leading-relaxed">
+                         <Info className="inline-block mr-1 mb-0.5" size={10} /> 
+                         L'export inclut automatiquement le logo et les mentions légales de votre instance "{tenantSettings?.name || 'GeStocPro'}".
+                       </p>
+                    </div>
+                  </div>
+
+                  <div className="p-8 bg-white border-t border-slate-100 flex flex-col gap-3">
+                    <button 
+                      onClick={handleExport}
+                      className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95"
+                    >
+                      {exportFormat === 'PDF' ? <Printer size={18}/> : <Download size={18}/>} GÉNÉRER LE FICHIER
+                    </button>
+                  </div>
+                </div>
+
+                <div className="col-span-12 lg:col-span-8 flex flex-col bg-white overflow-hidden relative">
+                  {/* PREVIEW EN TEMPS RÉEL */}
+                  <div className="p-8 bg-slate-50/50 border-b flex justify-between items-center">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aperçu en temps réel ({exportPreviewData.length} lignes)</h4>
+                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Visualisation Dynamique</span>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6 lg:p-12 custom-scrollbar bg-slate-100/30">
+                    <div id="export-preview-stock" className="bg-white p-6 lg:p-12 w-full mx-auto text-slate-800 shadow-xl border border-slate-200 font-sans lg:scale-100 scale-100 origin-top">
+                      {/* Logo et Header Preview */}
+                      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+                        <div>
+                          {tenantSettings?.logoUrl ? (
+                            <img src={tenantSettings.logoUrl} className="h-16 w-auto object-contain mb-2 max-w-[200px]" alt="Logo" />
+                          ) : (
+                            <div className="text-2xl font-black text-indigo-600 mb-2 uppercase tracking-tighter">{tenantSettings?.name || 'VOTRE SOCIÉTÉ'}</div>
+                          )}
+                          <div className="space-y-0.5 text-[10px] font-bold text-slate-400">
+                            <div>{tenantSettings?.address || ''}</div>
+                            <div>{tenantSettings?.email || ''} {tenantSettings?.phone ? '• ' + tenantSettings.phone : ''}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <h1 className="text-2xl font-black text-slate-900 tracking-tighter mb-1">RAPPORT DE MOUVEMENTS</h1>
+                          <p className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded inline-block">PÉRIODE : {exportDates.from} AU {exportDates.to}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-900 text-white text-[10px] font-black uppercase">
+                              <th className="p-3">DATE</th>
+                              <th className="p-3">ARTICLE</th>
+                              <th className="p-3">SKU</th>
+                              <th className="p-3 text-center">TYPE</th>
+                              <th className="p-3 text-right">QTE</th>
+                              <th className="p-3">OPÉRATEUR</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {exportPreviewData.length === 0 ? (
+                              <tr><td colSpan={6} className="py-12 text-center text-[10px] font-black text-slate-300 uppercase">Aucune donnée pour cette période</td></tr>
+                            ) : exportPreviewData.map((m, i) => {
+                              const p = m.stock_item || m.stockItem || m.StockItem || {};
+                              return (
+                                <tr key={i} className="text-[12px] font-bold">
+                                  <td className="p-3 text-slate-500">{new Date(m.createdAt).toLocaleString()}</td>
+                                  <td className="p-3 text-slate-900 uppercase truncate max-w-[160px]">{p.name}</td>
+                                  <td className="p-3">{p.sku}</td>
+                                  <td className="p-3 text-center">{m.type}</td>
+                                  <td className="p-3 text-right font-black">{m.qty}</td>
+                                  <td className="p-3">{m.userRef}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-10 border-t border-slate-100 pt-6 flex justify-between items-end opacity-40 grayscale">
+                        <div className="text-[9px] font-bold uppercase space-y-1">
+                           <p>Généré par GeStocPro Cloud</p>
+                           <p>Empreinte : {Math.random().toString(36).substring(7).toUpperCase()}</p>
+                        </div>
+                        <div className="w-28 h-12 border border-slate-300 rounded-lg flex items-center justify-center text-[10px] font-black uppercase text-slate-300 italic">Signature</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL RÉAPPROVISIONNEMENT PAR LOTS */}
       {showInModal && (
