@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import Layout from './components/Layout';
+import ToastProvider from './components/ToastProvider';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import InventoryCampaign from './components/InventoryCampaign';
@@ -327,23 +328,25 @@ const App: React.FC = () => {
 
   return (
     <ErrorBoundary children={
-      <div className={`min-h-screen ${activeTab === 'superadmin' ? 'bg-slate-950' : 'bg-slate-50'}`}>
-        <Layout 
-          user={currentUser!} 
-          activeTab={activeTab} 
-          setActiveTab={(tab) => {
-            setNavigationMetadata(null); 
-            setActiveTab(tab);
-          }} 
-          onLogout={handleLogout}
-          isSuperAdminMode={activeTab === 'superadmin'}
-          logoUrl={appSettings.platformLogo}
-          companyName={appSettings.companyName}
-        >
-          {renderContent()}
-        </Layout>
-        {activeTab !== 'superadmin' && activeTab !== 'ai_analysis' && currentPlan?.hasAiChatbot && <ChatInterface user={currentUser!} />}
-      </div>
+      <ToastProvider>
+        <div className={`min-h-screen ${activeTab === 'superadmin' ? 'bg-slate-950' : 'bg-slate-50'}`}>
+          <Layout 
+            user={currentUser!} 
+            activeTab={activeTab} 
+            setActiveTab={(tab) => {
+              setNavigationMetadata(null); 
+              setActiveTab(tab);
+            }} 
+            onLogout={handleLogout}
+            isSuperAdminMode={activeTab === 'superadmin'}
+            logoUrl={appSettings.platformLogo}
+            companyName={appSettings.companyName}
+          >
+            {renderContent()}
+          </Layout>
+          {activeTab !== 'superadmin' && activeTab !== 'ai_analysis' && currentPlan?.hasAiChatbot && <ChatInterface user={currentUser!} />}
+        </div>
+      </ToastProvider>
     } />
   );
 };
