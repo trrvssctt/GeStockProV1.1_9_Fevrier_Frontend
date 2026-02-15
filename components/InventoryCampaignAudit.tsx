@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, CheckCircle2, Loader2, Printer, Download,
   Search, Package, RefreshCw, FileText, Plus,
@@ -24,12 +24,26 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
   const [isValidating, setIsValidating] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [shouldSyncStock, setShouldSyncStock] = useState(true);
+  const [dirtyCounts, setDirtyCounts] = useState<Record<string, string>>({});
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const saveIntervalRef = useRef<number | null>(null);
 
   const fetchItems = async () => {
     setLoading(true);
     try {
       const data = await apiClient.get(`/stock/campaigns/${campaign.id}`);
-      setItems(data.items || []);
+      // restore any locally saved counted quantities so user can resume where they left off
+      const lsKey = `inventory_campaign_${campaign.id}_counts`;
+      let saved: Record<string, string> = {};
+      try { saved = JSON.parse(localStorage.getItem(lsKey) || '{}'); } catch (e) { saved = {}; }
+      const items = (data.items || []).map((i: any) => ({
+        ...i,
+        // for a new draft campaign we want inputs empty; otherwise use server value; prefer locally saved value if present
+        countedQty: saved[i.id] !== undefined ? saved[i.id] : (campaign.status === 'DRAFT' ? '' : (i.countedQty ?? 0))
+      }));
+      setItems(items);
+      // initialize dirty map from saved local values so subsequent edits merge rather than overwrite
+      setDirtyCounts(saved || {});
     } catch (e) {
       console.error("Fetch Campaign Items error");
     } finally {
@@ -41,25 +55,86 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
     fetchItems();
   }, [campaign.id]);
 
-  const handleUpdateQty = async (itemId: string, val: string) => {
-    const qty = parseInt(val) || 0;
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, countedQty: qty } : i));
-    
-    setIsSaving(itemId);
+  // periodic autosave interval
+  useEffect(() => {
+    if (saveIntervalRef.current) window.clearInterval(saveIntervalRef.current);
+    saveIntervalRef.current = window.setInterval(() => {
+      batchSave();
+    }, 10000);
+    const onUnload = () => { batchSave(); };
+    window.addEventListener('beforeunload', onUnload);
+    const onVisibility = () => { if (document.visibilityState === 'hidden') batchSave(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      if (saveIntervalRef.current) window.clearInterval(saveIntervalRef.current);
+      window.removeEventListener('beforeunload', onUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign.id]);
+
+  // Update local state and mark item as dirty; actual server sync is batched
+  const persistToLocal = (map: Record<string, string>) => {
+    const lsKey = `inventory_campaign_${campaign.id}_counts`;
+    try { localStorage.setItem(lsKey, JSON.stringify(map)); } catch (e) { /* ignore */ }
+  };
+
+  const handleUpdateQty = (itemId: string, val: string) => {
+    // keep the raw string so empty value is preserved for UI
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, countedQty: val } : i));
+    setDirtyCounts(prev => {
+      const next = { ...prev, [itemId]: val };
+      persistToLocal(next);
+      return next;
+    });
+  };
+
+  // Batch-save dirty items to server in chunks
+  const batchSave = async () => {
+    const entries = Object.entries(dirtyCounts);
+    if (entries.length === 0) return;
+    setIsAutoSaving(true);
+    const chunkSize = 50;
     try {
-      await apiClient.put(`/stock/campaigns/${campaign.id}/items/${itemId}`, { countedQty: qty });
-    } catch (e) {
-      console.error("Autosave error");
+      for (let i = 0; i < entries.length; i += chunkSize) {
+        const chunk = entries.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async ([itemId, val]) => {
+          const parsed = parseInt(String(val));
+          const body: any = { countedQty: Number.isNaN(parsed) ? null : parsed };
+          try {
+            await apiClient.put(`/stock/campaigns/${campaign.id}/items/${itemId}`, body);
+            // on success, remove from dirty map
+            setDirtyCounts(prev => {
+              const copy = { ...prev };
+              delete copy[itemId];
+              persistToLocal(copy);
+              return copy;
+            });
+          } catch (e) {
+            console.error('Batch save error', e);
+          }
+        }));
+      }
     } finally {
-      setIsSaving(null);
+      setIsAutoSaving(false);
     }
   };
 
   const finalizeClosure = async () => {
+    // double-check that all fields are filled before finalizing
+    const stillMissing = items.some(i => {
+      const v = i.countedQty;
+      return v === '' || v === null || v === undefined || Number.isNaN(parseInt(String(v)));
+    });
+    if (stillMissing) return alert('Impossible de clôturer : toutes les quantités ne sont pas remplies.');
+
     setIsValidating(true);
     try {
+      await batchSave();
       await apiClient.post(`/stock/campaigns/${campaign.id}/validate`, { syncStock: shouldSyncStock });
       campaign.status = 'VALIDATED';
+      // clear local saved counts on successful validation
+      try { localStorage.removeItem(`inventory_campaign_${campaign.id}_counts`); } catch (e) { /* ignore */ }
       setShowValidationModal(false);
       setShowReport(true);
     } catch (e: any) {
@@ -75,6 +150,14 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
   );
 
   const isLocked = campaign.status === 'VALIDATED';
+
+  // Ensure all lines have a counted quantity (non-empty and numeric) before allowing closure
+  const allCounted = items.length > 0 && items.every(i => {
+    const v = i.countedQty;
+    if (v === '' || v === null || v === undefined) return false;
+    const n = parseInt(String(v));
+    return !Number.isNaN(n);
+  });
 
   if (showReport || isLocked) {
     return (
@@ -157,9 +240,16 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
             </p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowValidationModal(true)}
-          className="bg-indigo-600 text-white px-10 py-5 rounded-[1.5rem] font-black hover:bg-slate-900 transition-all shadow-xl flex items-center gap-3 text-xs uppercase tracking-widest active:scale-95"
+        <button
+          onClick={() => {
+            if (!allCounted) {
+              alert('Veuillez saisir toutes les quantités avant de clôturer l\'audit.');
+              return;
+            }
+            setShowValidationModal(true);
+          }}
+          disabled={!allCounted}
+          className={`px-10 py-5 rounded-[1.5rem] font-black transition-all shadow-xl flex items-center gap-3 text-xs uppercase tracking-widest active:scale-95 ${allCounted ? 'bg-indigo-600 text-white hover:bg-slate-900' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
         >
           <CheckCircle2 size={18} /> CLÔTURER L'AUDIT
         </button>
@@ -177,7 +267,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
           />
         </div>
         <div className="flex items-center gap-2 px-6 py-4 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 text-[10px] font-black uppercase">
-          <RefreshCw size={14} className="animate-spin" /> SAUVEGARDE AUTO
+          <RefreshCw size={14} className={isAutoSaving ? 'animate-spin' : ''} /> SAUVEGARDE AUTO
         </div>
       </div>
 
