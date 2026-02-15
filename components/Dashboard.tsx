@@ -425,15 +425,15 @@ const Dashboard: React.FC<{ user: User, currency: string, onNavigate?: (tab: str
               }))}>
                 <defs>
                   <linearGradient id="colorAdmin" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--primary-kernel)" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="var(--primary-kernel)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWait: 700, fill: '#64748b'}} />
                 <YAxis hide />
                 <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
-                <Area type="monotone" dataKey="total" name="Total TTC" stroke="#4f46e5" strokeWidth={4} fill="url(#colorAdmin)" />
+                <Area type="monotone" dataKey="total" name="Total TTC" stroke="var(--primary-kernel)" strokeWidth={4} fill="url(#colorAdmin)" />
                 <Bar dataKey="paid" name="Encaissé" fill="#10b981" radius={[4, 4, 0, 0]} barSize={12} />
               </ComposedChart>
             </ResponsiveContainer>
