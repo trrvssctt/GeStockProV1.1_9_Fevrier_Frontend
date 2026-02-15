@@ -31,7 +31,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
   const [showDocGenerator, setShowDocGenerator] = useState<{ sale: any, mode: 'FACTURE' | 'RECU' | 'BON_SORTIE' } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedSaleDetails, setSelectedSaleDetails] = useState<any>(null);
-  const [pageSize, setPageSize] = useState<number>(30);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [activeInventory, setActiveInventory] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -304,6 +304,16 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
           </p>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
+          <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
+            Afficher
+            <select value={pageSize} onChange={e => setPageSize(parseInt(e.target.value))} className="ml-2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black outline-none">
+              <option value={5}>5</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={-1}>Tous</option>
+            </select>
+          </label>
           <button onClick={() => setShowFilters(!showFilters)} className={`p-4 rounded-2xl transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 hover:text-indigo-600'}`}>
             <Filter size={20} /> FILTRES {filteredSales.length !== sales.length && <span className="bg-white text-indigo-600 w-4 h-4 rounded-full flex items-center justify-center text-[8px]">!</span>}
           </button>
