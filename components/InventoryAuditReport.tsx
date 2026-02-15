@@ -22,8 +22,8 @@ const InventoryAuditReport: React.FC<Props> = ({ items, settings, campaign }) =>
     return { label: 'Incohérent', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100' };
   };
 
-  const totalSystem = items.reduce((sum, i) => sum + i.systemQty, 0);
-  const totalCounted = items.reduce((sum, i) => sum + i.countedQty, 0);
+  const totalSystem = items.reduce((sum, i) => sum + (Number(i.systemQty) || 0), 0);
+  const totalCounted = items.reduce((sum, i) => sum + (Number(i.countedQty) || 0), 0);
   const anomalies = items.filter(i => i.countedQty !== i.systemQty).length;
 
   return (
@@ -79,8 +79,10 @@ const InventoryAuditReport: React.FC<Props> = ({ items, settings, campaign }) =>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.map((item: any, i: number) => {
-              const verdict = getAuditVerdict(item.countedQty, item.systemQty);
-              const diff = item.countedQty - item.systemQty;
+              const numericCounted = Number(item.countedQty) || 0;
+              const numericSystem = Number(item.systemQty) || 0;
+              const verdict = getAuditVerdict(numericCounted, numericSystem);
+              const diff = numericCounted - numericSystem;
 
               return (
                 <tr key={i} className="text-sm font-bold">
@@ -88,8 +90,8 @@ const InventoryAuditReport: React.FC<Props> = ({ items, settings, campaign }) =>
                     <p className="text-slate-900 uppercase truncate max-w-[180px]">{item.stock_item?.name}</p>
                     <p className="text-[8px] font-mono text-slate-400">SKU: {item.stock_item?.sku}</p>
                   </td>
-                  <td className="p-5 text-center font-black text-slate-400">{item.systemQty}</td>
-                  <td className="p-5 text-center font-black text-indigo-600">{item.countedQty}</td>
+                  <td className="p-5 text-center font-black text-slate-400">{numericSystem.toLocaleString()}</td>
+                  <td className="p-5 text-center font-black text-indigo-600">{numericCounted.toLocaleString()}</td>
                   <td className={`p-5 text-center font-black ${diff === 0 ? 'text-slate-300' : diff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {diff > 0 ? `+${diff}` : diff}
                   </td>
