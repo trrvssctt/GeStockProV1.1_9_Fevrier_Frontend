@@ -19,6 +19,7 @@ const Recovery = ({ currency }: { currency: string }) => {
   const [showRemindersModal, setShowRemindersModal] = useState(false);
   const [selectedDebtors, setSelectedDebtors] = useState<string[]>([]);
   const [perPage, setPerPage] = useState<number | 'ALL'>(25);
+  const [notification, setNotification] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
   const fetchDebtors = async () => {
     setLoading(true);
@@ -102,7 +103,11 @@ const Recovery = ({ currency }: { currency: string }) => {
 
   const sendSelectedViaGmail = (list: any[]) => {
     const targets = list.filter(d => selectedDebtors.includes(d.id));
-    if (targets.length === 0) return alert('Aucun destinataire sélectionné.');
+    if (targets.length === 0) {
+      setNotification({ message: 'Aucun destinataire sélectionné.', type: 'error' });
+      window.setTimeout(() => setNotification(null), 4000);
+      return;
+    }
     targets.forEach((t: any) => {
       const subject = `Relance de paiement - ${t.companyName}`;
       const body = `Bonjour ${t.companyName},\n\nSauf erreur de notre part, votre compte client présente un solde débiteur de ${t.outstandingBalance.toLocaleString()} ${currency}.\n\nNous vous remercions de bien vouloir régulariser cette situation dans les plus brefs délais.\n\nRestant à votre disposition,\nL'équipe administrative.`;
@@ -125,6 +130,21 @@ const Recovery = ({ currency }: { currency: string }) => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      {notification && (
+        <div className={`fixed top-6 right-6 z-[900] w-full max-w-xs rounded-2xl text-white shadow-lg px-4 py-3 flex items-start gap-3 ${notification.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}`}>
+          <div className="mt-0.5">
+            {notification.type === 'error' ? (
+              <AlertCircle size={20} />
+            ) : (
+              <CheckCircle2 size={20} />
+            )}
+          </div>
+          <div className="flex-1 text-sm font-black">{notification.message}</div>
+          <button onClick={() => setNotification(null)} className="opacity-80 hover:opacity-100 p-1 rounded-full">
+            <X size={18} />
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-rose-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
           <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><Landmark size={80}/></div>
