@@ -7,6 +7,7 @@ import {
 import { authBridge } from '../services/authBridge';
 import { apiClient } from '../services/api';
 import { SubscriptionPlan } from '../types';
+import { useToast } from './ToastProvider';
 
 interface Category {
   id: string;
@@ -41,6 +42,7 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
   const currentUser = authBridge.getSession()?.user;
   const canModify = currentUser ? authBridge.canPerform(currentUser, 'EDIT', 'categories') : false;
   const isLimitReached = plan?.id === 'FREE_TRIAL' && categories.length >= 3;
+  const showToast = useToast();
 
   const fetchData = async () => {
     setLoading(true);
@@ -109,7 +111,7 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
 
   const openEdit = (cat: Category) => {
     if (hasLinkedSubs(cat.id)) {
-      alert("Modification bloquée : Cette catégorie possède des sous-catégories liées.");
+      showToast("Modification bloquée : Cette catégorie possède des sous-catégories liées.", 'error');
       return;
     }
     setSelectedCategory(cat);

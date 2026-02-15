@@ -12,6 +12,7 @@ import { SUBSCRIPTION_PLANS } from '../constants';
 import { User, UserRole, SubscriptionPlan } from '../types';
 import { apiClient } from '../services/api';
 import DocumentPreview from './DocumentPreview';
+import { useToast } from './ToastProvider';
 import waveQr from '../assets/qr_code_marchant_wave.png';
 import waveLogo from '../assets/wave_logo.png';
 
@@ -21,6 +22,7 @@ interface SubscriptionProps {
 }
 
 const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
+  const showToast = useToast();
   const [subscriptionData, setSubscriptionData] = useState<any>(null);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +194,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
         fetchData();
       }, 3000);
     } catch (err: any) {
-      alert("Erreur : " + (err.message || "Erreur Kernel"));
+      showToast("Erreur : " + (err.message || "Erreur Kernel"), 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -228,7 +230,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
 
       setShowDocGenerator({ sale: subSale, mode: 'SUBSCRIPTION_INVOICE' });
     } catch (e) {
-      alert("Erreur lors de la récupération de la facture d'abonnement.");
+      showToast("Erreur lors de la récupération de la facture d'abonnement.", 'error');
     }
   };
 
@@ -375,9 +377,9 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                          const canvas = await html2canvas(node as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
                          // Prefer PNG
                          const mime = 'image/png';
-                         canvas.toBlob((blob: Blob | null) => {
+                           canvas.toBlob((blob: Blob | null) => {
                            if (!blob) {
-                             alert('Impossible de générer l\'image');
+                             showToast('Impossible de générer l\'image', 'error');
                              return;
                            }
                            const url = window.URL.createObjectURL(blob);
@@ -390,9 +392,9 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                            a.remove();
                            window.URL.revokeObjectURL(url);
                          }, mime, 0.95);
-                       } catch (err: any) {
+                         } catch (err: any) {
                          console.error('Capture/download error', err);
-                         alert(err?.message || 'Erreur lors de la génération de l\'image');
+                         showToast(err?.message || 'Erreur lors de la génération de l\'image', 'error');
                        }
                      }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-all"><Download size={14}/> Télécharger</button>
                    </div>

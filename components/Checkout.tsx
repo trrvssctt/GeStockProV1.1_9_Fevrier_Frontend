@@ -11,6 +11,7 @@ import { SubscriptionPlan } from '../types';
 import { apiClient } from '../services/api';
 import waveQr from '../assets/qr_code_marchant_wave.png';
 import waveLogo from '../assets/wave_logo.png';
+import { useToast } from './ToastProvider';
 
 interface CheckoutProps {
   planId: string;
@@ -28,6 +29,7 @@ const Checkout: React.FC<CheckoutProps> = ({ planId, user, planObj, onSuccess, o
   const [txReference, setTxReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<'IDLE' | 'WAITING' | 'SUCCESS'>('IDLE');
+  const showToast = useToast();
 
   // On utilise l'objet plan passé dynamiquement s'il existe, sinon on cherche dans les constantes par ID
   const plan = useMemo(() => {
@@ -56,7 +58,7 @@ const Checkout: React.FC<CheckoutProps> = ({ planId, user, planObj, onSuccess, o
     } catch (e) {
       console.error("Kernel Validation Error:", e);
       setStatus('IDLE');
-      alert("Échec de la validation Kernel. Le service de paiement n'a pas pu confirmer la transaction avec votre instance.");
+      showToast("Échec de la validation Kernel. Le service de paiement n'a pas pu confirmer la transaction avec votre instance.", 'error');
     } finally {
       setIsProcessing(false);
     }

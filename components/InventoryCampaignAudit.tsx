@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/api';
 import InventoryAuditReport from './InventoryAuditReport';
+import { useToast } from './ToastProvider';
 
 interface Props {
   campaign: any;
@@ -27,6 +28,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, string>>({});
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const saveIntervalRef = useRef<number | null>(null);
+  const showToast = useToast();
 
   const fetchItems = async () => {
     setLoading(true);
@@ -126,7 +128,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
       const v = i.countedQty;
       return v === '' || v === null || v === undefined || Number.isNaN(parseInt(String(v)));
     });
-    if (stillMissing) return alert('Impossible de clôturer : toutes les quantités ne sont pas remplies.');
+    if (stillMissing) { showToast('Impossible de clôturer : toutes les quantités ne sont pas remplies.', 'error'); return; }
 
     setIsValidating(true);
     try {
@@ -138,7 +140,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
       setShowValidationModal(false);
       setShowReport(true);
     } catch (e: any) {
-      alert(e.message || "Erreur lors de la clôture.");
+      showToast(e.message || "Erreur lors de la clôture.", 'error');
     } finally {
       setIsValidating(false);
     }
@@ -201,7 +203,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
 
                     const canvas = await html2canvas(node as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
                     canvas.toBlob((blob: Blob | null) => {
-                      if (!blob) { alert('Impossible de générer l\'image'); return; }
+                      if (!blob) { showToast('Impossible de générer l\'image', 'error'); return; }
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
@@ -214,7 +216,7 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
                     }, 'image/png', 0.95);
                   } catch (err: any) {
                     console.error('Capture/download error', err);
-                    alert(err?.message || 'Erreur lors de la génération de l\'image');
+                    showToast(err?.message || 'Erreur lors de la génération de l\'image', 'error');
                   }
                 }} className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 shadow-sm hover:bg-slate-50"><Download size={18}/> Télécharger</button>
               </div>

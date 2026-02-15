@@ -7,6 +7,7 @@ import {
   TrendingDown, Phone, Eye
 } from 'lucide-react';
 import { apiClient } from '../services/api';
+import { useToast } from './ToastProvider';
 import { Customer } from '../types';
 
 const Recovery = ({ currency }: { currency: string }) => {
@@ -20,6 +21,7 @@ const Recovery = ({ currency }: { currency: string }) => {
   const [selectedDebtors, setSelectedDebtors] = useState<string[]>([]);
   const [perPage, setPerPage] = useState<number | 'ALL'>(25);
   const [notification, setNotification] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+  const showToast = useToast();
 
   const fetchDebtors = async () => {
     setLoading(true);
@@ -76,7 +78,7 @@ const Recovery = ({ currency }: { currency: string }) => {
   }, [filteredDebtors, perPage]);
 
   const handleWhatsApp = (customer: any) => {
-    if (!customer.phone) return alert("Numéro de téléphone manquant pour ce client.");
+    if (!customer.phone) { showToast("Numéro de téléphone manquant pour ce client.", 'error'); return; }
     const message = `Bonjour ${customer.companyName}, nous vous contactons concernant votre solde client de ${customer.outstandingBalance.toLocaleString()} ${currency} dans notre établissement. Merci de nous recontacter pour la régularisation.`;
     window.open(`https://wa.me/${customer.phone.replace(/\s+/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
   };

@@ -15,6 +15,7 @@ import { apiClient } from '../services/api';
 import { authBridge } from '../services/authBridge';
 import { User, StockItem, Customer, SubscriptionPlan } from '../types';
 import DocumentPreview from './DocumentPreview';
+import { useToast } from './ToastProvider';
 
 const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, user: User, tenantSettings?: any, plan?: SubscriptionPlan }) => {
   const [sales, setSales] = useState<any[]>([]);
@@ -56,6 +57,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
     amountPaid: 0,
     items: [] as { productId: string, quantity: number, price: number, name: string, type: 'PRODUCT' | 'SERVICE' }[]
   });
+  const showToast = useToast();
 
   let limit = 99999;
   if (plan?.id === 'FREE_TRIAL') limit = 5;
@@ -182,13 +184,13 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
 
   const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeInventory) return alert("Ventes bloquées durant l'inventaire.");
-    if (saleForm.items.length === 0) return alert("Le panier est vide.");
+    if (activeInventory) { showToast("Ventes bloquées durant l'inventaire.", 'info'); return; }
+    if (saleForm.items.length === 0) { showToast("Le panier est vide.", 'error'); return; }
     setActionLoading(true);
       try {
       if (!editModeId && !authBridge.isCreationAllowed(user, 'sales', monthlySalesCount)) {
-        if (plan?.id === 'PRO') alert('Limite du plan PRO atteinte : maximum 50 ventes par mois.');
-        else alert('Limite du plan Basic atteinte : maximum 20 ventes par mois.');
+        if (plan?.id === 'PRO') showToast('Limite du plan PRO atteinte : maximum 50 ventes par mois.', 'info');
+        else showToast('Limite du plan Basic atteinte : maximum 20 ventes par mois.', 'info');
         setActionLoading(false);
         return;
       }
@@ -206,7 +208,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
       setEditModeId(null);
       fetchData();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || 'Erreur', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -220,7 +222,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
       setShowPaymentModal(null);
       setSelectedSaleDetails(null);
       fetchData();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showToast(e.message || 'Erreur', 'error'); }
     finally { setActionLoading(false); }
   };
 
@@ -233,12 +235,12 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
       setShowDeliveryModal(null);
       setSelectedSaleDetails(null);
       fetchData();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showToast(e.message || 'Erreur', 'error'); }
     finally { setActionLoading(false); }
   };
 
   const handleCancelSale = async () => {
-    if (!cancelForm.reason) return alert("Raison obligatoire.");
+    if (!cancelForm.reason) { showToast("Raison obligatoire.", 'error'); return; }
     setActionLoading(true);
     try {
       await apiClient.post(`/sales/${showCancelModal.id}/cancel`, { 
@@ -248,7 +250,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
       setShowCancelModal(null);
       setSelectedSaleDetails(null);
       fetchData();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showToast(e.message || 'Erreur', 'error'); }
     finally { setActionLoading(false); }
   };
 
@@ -729,7 +731,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
               </div>
               <div className="p-10 space-y-8">
                  <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Motif de l'annulation</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Motif de l'annulation <span className="text-rose-600">*</span></label>
                     <textarea 
                       required 
                       placeholder="Indiquez la raison (ex: Erreur saisie, désistement client...)"
@@ -805,7 +807,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
                           const mime = 'image/png';
                           canvas.toBlob((blob: Blob | null) => {
                             if (!blob) {
-                              alert('Impossible de générer l\'image');
+                              showToast('Impossible de générer l\'image', 'error');
                               return;
                             }
                             const url = window.URL.createObjectURL(blob);
@@ -820,7 +822,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
                           }, mime, 0.95);
                         } catch (err: any) {
                           console.error('Capture/download error', err);
-                          alert(err?.message || 'Erreur lors de la génération de l\'image');
+                          showToast(err?.message || 'Erreur lors de la génération de l\'image', 'error');
                         }
                       }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-all"><Download size={14}/> Télécharger</button>
                     </div>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/api';
 import InventoryCampaignAudit from './InventoryCampaignAudit';
+import { useToast } from './ToastProvider';
 
 const InventoryCampaign = ({ settings }: { settings: any }) => {
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -28,6 +29,8 @@ const InventoryCampaign = ({ settings }: { settings: any }) => {
       setLoading(false);
     }
   };
+
+  const showToast = useToast();
 
   useEffect(() => {
     fetchCampaigns();
@@ -59,14 +62,14 @@ const InventoryCampaign = ({ settings }: { settings: any }) => {
       const draft = data.find((c: any) => c.status === 'DRAFT');
       
       if (draft) {
-        alert("Une campagne d'inventaire est déjà en cours. Veuillez la clôturer avant d'en créer une nouvelle.");
+        showToast("Une campagne d'inventaire est déjà en cours. Veuillez la clôturer avant d'en créer une nouvelle.", 'error');
         return;
       }
       
       setNewCampaignName(`Inventaire du ${new Date().toLocaleDateString()}`);
       setShowCreateModal(true);
     } catch (e) {
-      alert("Impossible de vérifier l'état du Kernel.");
+      showToast("Impossible de vérifier l'état du Kernel.", 'error');
     } finally {
       setActionLoading(false);
     }

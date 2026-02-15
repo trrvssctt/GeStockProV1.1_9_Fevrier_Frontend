@@ -8,6 +8,7 @@ import {
 import { authBridge } from '../services/authBridge';
 import { apiClient } from '../services/api';
 import { SubscriptionPlan, StockItem } from '../types';
+import { useToast } from './ToastProvider';
 
 interface Category {
   id: string;
@@ -50,6 +51,7 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
   const currentUser = authBridge.getSession()?.user;
   const canModify = currentUser ? authBridge.canPerform(currentUser, 'EDIT', 'subcategories') : false;
   const isLimitReached = plan?.id === 'FREE_TRIAL' && subcategories.length >= 3;
+  const showToast = useToast();
 
   const fetchData = async () => {
     setLoading(true);
@@ -123,7 +125,7 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
 
   const openEdit = (sub: Subcategory) => {
     if (hasLinkedProducts(sub.id)) {
-      alert("Modification bloquée : Cette sous-catégorie contient des produits actifs.");
+      showToast("Modification bloquée : Cette sous-catégorie contient des produits actifs.", 'error');
       return;
     }
     setSelectedSub(sub);

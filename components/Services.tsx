@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { authBridge } from '../services/authBridge';
 import { apiClient } from '../services/api';
+import { useToast } from './ToastProvider';
 
 const Services = ({ currency }: { currency: string }) => {
   const [services, setServices] = useState<any[]>([]);
@@ -35,6 +36,7 @@ const Services = ({ currency }: { currency: string }) => {
 
   const currentUser = authBridge.getSession()?.user;
   const canModify = currentUser ? authBridge.canPerform(currentUser, 'EDIT', 'services') : false;
+  const showToast = useToast();
 
   const fetchData = async () => {
     setLoading(true);
@@ -98,7 +100,7 @@ const Services = ({ currency }: { currency: string }) => {
       }
     } catch (err) {
       console.error("Upload Error:", err);
-      alert("Échec de l'envoi de l'image.");
+      showToast("Échec de l'envoi de l'image.", 'error');
     } finally {
       setIsUploading(false);
     }
@@ -154,7 +156,7 @@ const Services = ({ currency }: { currency: string }) => {
 
   const openEdit = (service: any) => {
     if (isServiceLinked(service.id)) {
-      alert("Modification bloquée : Ce service est déjà rattaché à une ou plusieurs ventes.");
+      showToast("Modification bloquée : Ce service est déjà rattaché à une ou plusieurs ventes.", 'error');
       return;
     }
     setSelectedService(service);
@@ -394,7 +396,7 @@ const Services = ({ currency }: { currency: string }) => {
              <form onSubmit={handleSubmit} className="p-10 space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Identification</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Identification <span className="text-rose-600">*</span></label>
                     <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10" placeholder="Nom du service" />
                     <div className="relative">
                         <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />

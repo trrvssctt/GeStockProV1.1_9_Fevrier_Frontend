@@ -15,13 +15,23 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { apiClient } from '../services/api';
+import { useToast } from './ToastProvider';
 
 const SuperAdmin = () => {
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TENANTS' | 'SUBSCRIPTIONS' | 'PLANS'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TENANTS' | 'SUBSCRIPTIONS' | 'PLANS' | 'UPGRADES' | 'BILLING_ALERTS'>('DASHBOARD');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [tenants, setTenants] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [upgradeRequests, setUpgradeRequests] = useState<any[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logTenantFilter, setLogTenantFilter] = useState<string | null>(null);
+  const [logUserFilter, setLogUserFilter] = useState<string | null>(null);
+  const [usersForTenant, setUsersForTenant] = useState<any[]>([]);
+  const [billingOverdue, setBillingOverdue] = useState<any[]>([]);
+  const [billingUpcoming, setBillingUpcoming] = useState<any[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [search, setSearch] = useState('');
   
   // Modals
@@ -52,6 +62,41 @@ const SuperAdmin = () => {
       } else if (activeTab === 'PLANS') {
         const res = await apiClient.get('/admin/plans');
         setPlans(res || []);
+      } else if (activeTab === 'UPGRADES') {
+        const res = await apiClient.get('/admin/upgrade-requests');
+        setUpgradeRequests(res || []);
+      } else if (activeTab === 'BILLING_ALERTS') {
+        try {
+          setBillingLoading(true);
+          const tenantsRes = await apiClient.get('/admin/tenants');
+          setTenants(tenantsRes || []);
+          const dash = await apiClient.get('/admin/dashboard');
+          const upcoming = Array.isArray(dash?.subscriptionAlerts) ? dash.subscriptionAlerts : [];
+          // Overdue heuristics: tenant.paymentStatus not up-to-date OR subscription status not ACTIVE OR nextBillingDate in the past
+          const now = new Date();
+          const overdue = (tenantsRes || []).filter((t: any) => {
+            const next = t.subscription?.nextBillingDate ? new Date(t.subscription.nextBillingDate) : null;
+            return (t.paymentStatus && t.paymentStatus !== 'UP_TO_DATE') || (t.subscription && t.subscription.status !== 'ACTIVE') || (next && next < now);
+          });
+          setBillingOverdue(overdue || []);
+          setBillingUpcoming(upcoming || []);
+        } catch (err) {
+          console.error('Billing alerts fetch error', err);
+          setBillingOverdue([]);
+          setBillingUpcoming([]);
+        } finally {
+          setBillingLoading(false);
+        }
+      } else if (activeTab === 'LOGS') {
+        try {
+          setLogsLoading(true);
+          const tenantsRes = await apiClient.get('/admin/tenants');
+          setTenants(tenantsRes || []);
+          const logsRes = await apiClient.get('/admin/logs');
+          setLogs(logsRes || []);
+        } finally {
+          setLogsLoading(false);
+        }
       }
     } catch (err) {
       console.error("SuperAdmin Master Sync Error:", err);
@@ -61,6 +106,14 @@ const SuperAdmin = () => {
   };
 
   useEffect(() => { fetchData(); }, [activeTab]);
+
+  const showToast = useToast();
+
+  useEffect(() => {
+    if (activeTab === 'LOGS') {
+      fetchLogs(logTenantFilter, logUserFilter);
+    }
+  }, [logTenantFilter, logUserFilter, activeTab]);
 
   const recentPendingValidations = (Array.isArray(data?.pendingValidations) ? [...data.pendingValidations] : [])
     .sort((a: any, b: any) => {
@@ -83,10 +136,10 @@ const SuperAdmin = () => {
           await apiClient.post(`/admin/tenants/${id}/toggle-lock`, {});
           fetchData();
           setConfirmAction(null);
-        } catch (err: any) { 
-           alert(`Échec Kernel : ${err.message || 'Erreur interne'}`);
-           setConfirmAction(null);
-        }
+          } catch (err: any) { 
+            showToast(`Échec Kernel : ${err.message || 'Erreur interne'}`, 'error');
+            setConfirmAction(null);
+          }
       }
     });
   };
@@ -126,7 +179,7 @@ const SuperAdmin = () => {
         }
 
         if (candidates.length === 0) {
-          alert('Aucun abonnement à traiter ce mois.');
+          showToast('Aucun abonnement à traiter ce mois.', 'info');
           return;
         }
 
@@ -149,9 +202,9 @@ const SuperAdmin = () => {
               }
               fetchData();
               setConfirmAction(null);
-              alert('Traitement mensuel terminé.');
+              showToast('Traitement mensuel terminé.', 'success');
             } catch (err: any) {
-              alert(`Erreur lors du traitement mensuel: ${err?.message || err}`);
+              showToast(`Erreur lors du traitement mensuel: ${err?.message || err}`, 'error');
               setConfirmAction(null);
             } finally {
               setActionLoading(false);
@@ -186,13 +239,81 @@ const SuperAdmin = () => {
           fetchData();
           setConfirmAction(null);
         } catch (err: any) {
-          alert(`Échec de validation : ${err.message || 'Erreur interne'}`);
+          showToast(`Échec de validation : ${err.message || 'Erreur interne'}`, 'error');
           setConfirmAction(null);
         } finally {
           setActionLoading(false);
         }
       }
     });
+  };
+
+  const handleApproveUpgrade = (request: any) => {
+    setConfirmAction({
+      title: 'Approuver la demande d\'upgrade',
+      msg: `Approuver la demande d'upgrade de "${request.tenantName || request.tenant?.name}" vers "${request.requestedPlan}" ?`,
+      icon: Check,
+      type: 'success',
+      action: async () => {
+        setActionLoading(true);
+        try {
+          await apiClient.post(`/admin/upgrade-requests/${request.id}/approve`, {});
+          fetchData();
+          setConfirmAction(null);
+        } catch (err: any) {
+          showToast(`Erreur lors de l'approbation : ${err?.message || err}`, 'error');
+          setConfirmAction(null);
+        } finally { setActionLoading(false); }
+      }
+    });
+  };
+
+  const handleRejectUpgrade = (request: any) => {
+    setConfirmAction({
+      title: 'Rejeter la demande d\'upgrade',
+      msg: `Rejeter la demande d'upgrade de "${request.tenantName || request.tenant?.name}" ?`,
+      icon: Ban,
+      type: 'danger',
+      action: async () => {
+        setActionLoading(true);
+        try {
+          await apiClient.post(`/admin/upgrade-requests/${request.id}/reject`, {});
+          fetchData();
+          setConfirmAction(null);
+        } catch (err: any) {
+          showToast(`Erreur lors du rejet : ${err?.message || err}`, 'error');
+          setConfirmAction(null);
+        } finally { setActionLoading(false); }
+      }
+    });
+  };
+
+  const fetchUsersForTenant = async (tenantId: string | null) => {
+    if (!tenantId) { setUsersForTenant([]); return; }
+    try {
+      const res = await apiClient.get(`/admin/tenants/${tenantId}/users`);
+      setUsersForTenant(res || []);
+    } catch (err) {
+      console.error('Erreur fetch users for tenant', err);
+      setUsersForTenant([]);
+    }
+  };
+
+  const fetchLogs = async (tenantId?: string | null, userId?: string | null) => {
+    setLogsLoading(true);
+    try {
+      const q = [] as string[];
+      if (tenantId) q.push(`tenantId=${encodeURIComponent(tenantId)}`);
+      if (userId) q.push(`userId=${encodeURIComponent(userId)}`);
+      const url = `/admin/logs${q.length ? '?' + q.join('&') : ''}`;
+      const res = await apiClient.get(url);
+      setLogs(res || []);
+    } catch (err) {
+      console.error('Erreur fetch logs', err);
+      setLogs([]);
+    } finally {
+      setLogsLoading(false);
+    }
   };
 
   const handlePlanSubmit = async (e: React.FormEvent) => {
@@ -206,7 +327,7 @@ const SuperAdmin = () => {
       }
       setShowPlanModal(null);
       fetchData();
-    } catch (err) { alert("Erreur lors de l'enregistrement de l'offre."); }
+    } catch (err) { showToast("Erreur lors de l'enregistrement de l'offre.", 'error'); }
     finally { setActionLoading(false); }
   };
 
@@ -221,7 +342,7 @@ const SuperAdmin = () => {
           await apiClient.delete(`/admin/plans/${id}`);
           fetchData();
           setConfirmAction(null);
-        } catch (err) { alert("Erreur suppression."); setConfirmAction(null); }
+        } catch (err) { showToast("Erreur suppression.", 'error'); setConfirmAction(null); }
       }
     });
   };
@@ -231,7 +352,7 @@ const SuperAdmin = () => {
     try {
       const res = await apiClient.get(`/admin/tenants/${tenantId}/billing`);
       setShowBillingDetail(res);
-    } catch (err) { alert("Erreur de lecture du registre billing."); }
+    } catch (err) { showToast("Erreur de lecture du registre billing.", 'error'); }
     finally { setActionLoading(false); }
   };
 
@@ -266,7 +387,10 @@ const SuperAdmin = () => {
               { id: 'DASHBOARD', label: 'Dashboard Financier', icon: BarChart3 },
               { id: 'TENANTS', label: 'Comptes & Users', icon: Globe },
               { id: 'SUBSCRIPTIONS', label: 'Facturation SaaS', icon: CreditCard },
-              { id: 'PLANS', label: 'Catalogue Offres', icon: Layers }
+              { id: 'PLANS', label: 'Catalogue Offres', icon: Layers },
+              { id: 'UPGRADES', label: 'Traitement Upgrades', icon: ArrowUpRight },
+              { id: 'BILLING_ALERTS', label: 'Alertes Facturation', icon: Wallet },
+              { id: 'LOGS', label: 'Journal Logs', icon: Terminal }
             ].map(tab => (
               <button 
                 key={tab.id}
@@ -514,6 +638,132 @@ const SuperAdmin = () => {
               </div>
             </div>
           )}
+
+          {activeTab === 'BILLING_ALERTS' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-rose-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
+                  <p className="text-[10px] font-black text-rose-300 uppercase tracking-widest mb-1">Comptes en Retard</p>
+                  <h3 className="text-3xl font-black">{billingOverdue.length} Comptes</h3>
+                  <p className="text-sm text-rose-200 mt-4">Instances avec paiements manquants ou abonnements expirés.</p>
+                </div>
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Abonnements Proches d'Échéance</p>
+                  <h3 className="text-2xl font-black text-slate-900">{billingUpcoming.length} Clients</h3>
+                  <p className="text-sm text-slate-500 mt-4">Abonnements avec prochain prélèvement dans les prochains jours.</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-black uppercase">Détails Alertes de Facturation</h4>
+                  <div className="flex items-center gap-3">
+                    <button onClick={fetchData} className="p-3 bg-slate-50 text-slate-500 rounded-2xl hover:text-indigo-600"><RefreshCw size={18} /></button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-xs font-black text-slate-500 uppercase mb-2">Comptes qui nous doivent</p>
+                    <div className="space-y-3 max-h-72 overflow-y-auto">
+                      {billingLoading ? <div className="text-sm text-slate-500">Chargement...</div> : billingOverdue.length === 0 ? <div className="text-sm text-slate-400">Aucun compte en retard</div> : billingOverdue.map((t: any) => (
+                        <div key={t.id} className="p-3 border rounded-2xl flex justify-between items-center">
+                          <div>
+                            <div className="font-black">{t.name}</div>
+                            <div className="text-xs text-slate-400">{t.domain}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openBillingDetail(t.id)} className="px-3 py-2 bg-indigo-600 text-white rounded-2xl text-xs font-black">Voir Détails</button>
+                            <button onClick={async () => { try { await apiClient.post('/admin/email/send', { tenantId: t.id, subject: 'Rappel de paiement', body: `Bonjour ${t.name}, nous avons constaté un retard de paiement.` }); showToast('Rappel envoyé.', 'success'); } catch (e) { showToast('Erreur envoi', 'error'); } }} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black">Envoyer Rappel</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black text-slate-500 uppercase mb-2">Abonnements proches d'échéance</p>
+                    <div className="space-y-3 max-h-72 overflow-y-auto">
+                      {billingLoading ? <div className="text-sm text-slate-500">Chargement...</div> : billingUpcoming.length === 0 ? <div className="text-sm text-slate-400">Aucun abonnement imminent</div> : billingUpcoming.map((u: any) => (
+                        <div key={u.tenant || u.tenantId} className="p-3 border rounded-2xl flex justify-between items-center">
+                          <div>
+                            <div className="font-black">{u.tenant || u.tenantName}</div>
+                            <div className="text-xs text-slate-400">Échéance: {u.nextBillingDate ? new Date(u.nextBillingDate).toLocaleDateString() : 'N/A'}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => { /* find tenant id by name and open billing */ const t = tenants.find(tt => tt.name === (u.tenant || u.tenantName)); if (t) openBillingDetail(t.id); else showToast('Ouvrir détails indisponible', 'error'); }} className="px-3 py-2 bg-indigo-600 text-white rounded-2xl text-xs font-black">Voir Détails</button>
+                            <button onClick={async () => { try { await apiClient.post('/admin/email/send', { tenantName: u.tenant || u.tenantName, subject: 'Votre abonnement arrive à échéance', body: `Bonjour, votre prochain prélèvement est prévu le ${u.nextBillingDate ? new Date(u.nextBillingDate).toLocaleDateString() : 'prochainement'}.` }); showToast('Notification envoyée.', 'success'); } catch (e) { showToast('Erreur envoi', 'error'); } }} className="px-3 py-2 bg-amber-500 text-white rounded-2xl text-xs font-black">Notifier</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'LOGS' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-6 overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-black uppercase text-white">Journal des Logs</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black text-slate-500 uppercase">Filtrer et parcourir</span>
+                    <button onClick={() => fetchLogs(logTenantFilter, logUserFilter)} className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white"><RefreshCw size={18} className={logsLoading ? 'animate-spin' : ''} /></button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Compte</label>
+                    <select value={logTenantFilter || ''} onChange={e => { const v = e.target.value || null; setLogTenantFilter(v); fetchUsersForTenant(v); setLogUserFilter(null); }} className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-black text-white outline-none">
+                      <option value="">Tous les comptes</option>
+                      {tenants.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Utilisateur</label>
+                    <select value={logUserFilter || ''} onChange={e => { const v = e.target.value || null; setLogUserFilter(v); }} className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-black text-white outline-none">
+                      <option value="">Tous les utilisateurs</option>
+                      {usersForTenant.map(u => (<option key={u.id} value={u.id}>{u.email || u.name || u.username}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Recherche</label>
+                    <input placeholder="Filtrer par message / niveau..." onKeyDown={e => { if (e.key === 'Enter') fetchLogs(logTenantFilter, logUserFilter); }} className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-black text-white outline-none" />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-950 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      <tr>
+                        <th className="px-6 py-3">Date</th>
+                        <th className="px-6 py-3">Instance</th>
+                        <th className="px-6 py-3">Utilisateur</th>
+                        <th className="px-6 py-3">Niveau</th>
+                        <th className="px-6 py-3">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {logs.length === 0 ? (
+                        <tr><td colSpan={5} className="py-12 text-center text-slate-500 font-black">Aucun log trouvé</td></tr>
+                      ) : logs.map((l: any) => (
+                        <tr key={l.id || `${l.timestamp}-${Math.random()}`} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(l.timestamp || l.createdAt || Date.now()).toLocaleString()}</td>
+                          <td className="px-6 py-4 font-black text-white">{l.tenantName || l.tenant?.name || l.tenantId}</td>
+                          <td className="px-6 py-4 text-slate-400">{l.userName || l.user?.name || l.user?.email || '-'}</td>
+                          <td className={`px-6 py-4 font-black ${l.level === 'error' ? 'text-rose-400' : l.level === 'warn' ? 'text-amber-400' : 'text-emerald-400'}`}>{(l.level || 'info').toUpperCase()}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500 max-w-[60ch] truncate">{l.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -652,6 +902,49 @@ const SuperAdmin = () => {
           </div>
         </div>
       )}
+
+          {activeTab === 'UPGRADES' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-6 overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-black uppercase text-white">Traitement des demandes d'upgrade</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black text-slate-500 uppercase">{upgradeRequests.length} demandes</span>
+                    <button onClick={fetchData} className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-950 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      <tr>
+                        <th className="px-6 py-3">Instance</th>
+                        <th className="px-6 py-3">Offre courante</th>
+                        <th className="px-6 py-3">Offre demandée</th>
+                        <th className="px-6 py-3">Message</th>
+                        <th className="px-6 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {upgradeRequests.length === 0 ? (
+                        <tr><td colSpan={5} className="py-12 text-center text-slate-500 font-black">Aucune demande d'upgrade en attente</td></tr>
+                      ) : upgradeRequests.map((r: any) => (
+                        <tr key={r.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 font-black text-white">{r.tenantName || r.tenant?.name}</td>
+                          <td className="px-6 py-4 text-slate-400">{r.currentPlan}</td>
+                          <td className="px-6 py-4 text-indigo-300 font-black">{r.requestedPlan}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500 max-w-[40ch] truncate">{r.message || '—'}</td>
+                          <td className="px-6 py-4 text-right flex items-center justify-end gap-3">
+                            <button onClick={() => handleApproveUpgrade(r)} className="px-3 py-2 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase hover:bg-emerald-600 flex items-center gap-2"><Check size={14}/>Approuver</button>
+                            <button onClick={() => handleRejectUpgrade(r)} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl font-black text-xs uppercase hover:bg-rose-500 hover:text-white flex items-center gap-2"><Ban size={14}/>Rejeter</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
       {/* CUSTOM CONFIRMATION MODAL (High Fidelity Replacement) */}
       {confirmAction && (

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { authBridge } from '../services/authBridge';
 import { apiClient } from '../services/api';
 import { Mail, Phone, MapPin, CheckCircle2, Truck, Package, Sparkles, Globe, Download } from 'lucide-react';
+import { useToast } from './ToastProvider';
 
 interface DocumentProps {
   type: 'FACTURE' | 'RECU' | 'BON_SORTIE' | 'SUBSCRIPTION_INVOICE';
@@ -26,6 +27,8 @@ const DocumentPreview: React.FC<DocumentProps> = ({ type, sale, tenant, currency
     };
     fetchDocs();
   }, [sale.id, type]);
+
+  const showToast = useToast();
 
   const downloadDocument = async (docId: string, filename: string) => {
     try {
@@ -54,7 +57,7 @@ const DocumentPreview: React.FC<DocumentProps> = ({ type, sale, tenant, currency
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Download error', err);
-      alert(err.message || 'Erreur lors du téléchargement');
+      showToast(err.message || 'Erreur lors du téléchargement', 'error');
     } finally {
       setDownloadLoading(null);
     }

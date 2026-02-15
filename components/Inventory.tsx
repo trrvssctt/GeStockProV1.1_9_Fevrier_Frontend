@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { StockItem, UserRole, SubscriptionPlan, User, StockMovement } from '../types';
 import { apiClient } from '../services/api';
+import { useToast } from './ToastProvider';
 import { authBridge } from '../services/authBridge';
 
 const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, plan?: SubscriptionPlan }) => {
@@ -43,6 +44,7 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
   const currentUser = authBridge.getSession()?.user;
   const canModify = currentUser ? authBridge.canPerform(currentUser, 'EDIT', 'inventory') : false;
   const isLimitReached = plan?.id === 'FREE_TRIAL' && stocks.length >= 5;
+  const showToast = useToast();
 
   const fetchData = async () => {
     setLoading(true);
@@ -90,7 +92,7 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
       }
     } catch (err) {
       console.error("Upload Error:", err);
-      alert("Échec de l'envoi de l'image.");
+      showToast("Échec de l'envoi de l'image.", 'error');
     } finally {
       setIsUploading(false);
     }
@@ -111,7 +113,7 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
   const openEdit = (item: StockItem) => {
     if (activeInventory) return;
     if (isProductLinked(item.id)) {
-      alert("Modification bloquée : Ce produit est déjà lié à des ventes.");
+      showToast("Modification bloquée : Ce produit est déjà lié à des ventes.", 'error');
       return;
     }
     setSelectedItem(item);
@@ -456,7 +458,7 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tarification & Catégorie</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tarification & Catégorie <span className="text-rose-600">*</span></label>
                       <input type="number" required placeholder="Prix Unit. TTC" value={formData.unitPrice} onChange={e => setFormData({...formData, unitPrice: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-inner" />
                       <select value={formData.subcategoryId} onChange={e => setFormData({...formData, subcategoryId: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none appearance-none cursor-pointer shadow-inner">
                         <option value="">Sélectionner Sous-Catégorie</option>
@@ -466,7 +468,7 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Gestion Stock</label>
                       <div className="space-y-2">
-                        <label className="text-[8px] font-black text-slate-400 uppercase px-2">Seuil d'alerte</label>
+                        <label className="text-[8px] font-black text-slate-400 uppercase px-2">Seuil d'alerte <span className="text-rose-600">*</span></label>
                         <input type="number" value={formData.minThreshold} onChange={e => setFormData({...formData, minThreshold: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none shadow-inner" />
                       </div>
                       <div className="space-y-2">
