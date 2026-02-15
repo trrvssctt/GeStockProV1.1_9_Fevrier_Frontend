@@ -67,11 +67,43 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
     }
   };
 
+  // Normalize a hex color string to full 7-char form (#rrggbb)
+  const normalizeHex = (raw?: string) => {
+    if (!raw) return '';
+    let s = raw.trim();
+    if (!s) return '';
+    if (!s.startsWith('#')) s = '#' + s;
+    if (s.length === 4) {
+      // expand #rgb to #rrggbb
+      const r = s[1];
+      const g = s[2];
+      const b = s[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    return s.substring(0, 7).toLowerCase();
+  };
+
+  // Return an 8-digit hex (with alpha hex) for preview if base hex present
+  const withAlphaHex = (hex?: string, alpha = '30') => {
+    const base = normalizeHex(hex);
+    if (!base) return '';
+    return `${base}${alpha}`;
+  };
+
+  // Apply primary color to CSS variable in real-time for immediate preview
+  useEffect(() => {
+    if (localTenant && localTenant.primaryColor) {
+      document.documentElement.style.setProperty('--primary-kernel', normalizeHex(localTenant.primaryColor));
+    }
+  }, [localTenant?.primaryColor]);
+
   const handleSave = async () => {
     if (!localTenant) return;
     setIsSaving(true);
     try {
-      const response = await apiClient.put('/settings', localTenant);
+      // ensure primaryColor is normalized before saving
+      const toSave = { ...localTenant, primaryColor: normalizeHex(localTenant.primaryColor) };
+      const response = await apiClient.put('/settings', toSave);
       const updatedTenant = response.tenant;
       setLocalTenant(updatedTenant);
       setSuccess(true);
@@ -89,7 +121,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
       
       // Répercussion immédiate de la variable CSS
       if (updatedTenant.primaryColor) {
-        document.documentElement.style.setProperty('--primary-kernel', updatedTenant.primaryColor);
+        document.documentElement.style.setProperty('--primary-kernel', normalizeHex(updatedTenant.primaryColor));
       }
     } catch (e: any) {
       console.error("Save Settings Error:", e);
@@ -221,16 +253,16 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
                   <div className="flex items-center gap-4">
                     <input 
                       type="color" 
-                      value={localTenant.primaryColor || '#4f46e5'}
-                      onChange={e => setLocalTenant({...localTenant, primaryColor: e.target.value})}
+                      value={normalizeHex(localTenant.primaryColor) || '#4f46e5'}
+                      onChange={e => setLocalTenant({...localTenant, primaryColor: normalizeHex(e.target.value)})}
                       className="w-16 h-16 rounded-xl border-none p-0 bg-transparent cursor-pointer overflow-hidden shadow-lg"
                     />
                     <div className="flex-1 relative">
                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">#</span>
                        <input 
                         type="text" 
-                        value={(localTenant.primaryColor || '').replace('#', '')}
-                        onChange={e => setLocalTenant({...localTenant, primaryColor: '#' + e.target.value})}
+                        value={(normalizeHex(localTenant.primaryColor) || '#4f46e5').replace('#', '')}
+                        onChange={e => setLocalTenant({...localTenant, primaryColor: normalizeHex('#' + e.target.value)})}
                         className="w-full bg-white border border-slate-200 rounded-2xl pl-8 pr-4 py-4 text-sm font-mono font-black uppercase outline-none focus:ring-4 focus:ring-indigo-500/10"
                         placeholder="FFFFFF"
                         maxLength={6}
@@ -243,10 +275,10 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12"><Sparkles size={80}/></div>
                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Aperçu en temps réel</h4>
-                 <div className="space-y-4">
-                    <div className="h-4 w-3/4 rounded-full" style={{ backgroundColor: localTenant.primaryColor + '30' }}></div>
-                    <button className="px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg" style={{ backgroundColor: localTenant.primaryColor }}>Bouton Principal</button>
-                 </div>
+                  <div className="space-y-4">
+                    <div className="h-4 w-3/4 rounded-full" style={{ backgroundColor: withAlphaHex(localTenant.primaryColor, '30') }}></div>
+                    <button className="px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg" style={{ backgroundColor: normalizeHex(localTenant.primaryColor) }}>Bouton Principal</button>
+                  </div>
               </div>
             </div>
           </div>
