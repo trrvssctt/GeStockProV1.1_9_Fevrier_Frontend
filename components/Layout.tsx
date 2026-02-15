@@ -84,38 +84,40 @@ const Layout: React.FC<LayoutProps> = ({
               <span className="text-sm font-black tracking-tighter truncate max-w-[140px] uppercase">{companyName}</span>
             </div>
           ) : (
-            <h1 className={`text-xl font-bold tracking-tight ${isSuperAdminMode ? 'text-rose-500' : 'text-indigo-500'}`}>
+            <h1 className={`text-xl font-bold tracking-tight ${isSuperAdminMode ? 'text-rose-500' : ''}`} style={isSuperAdminMode ? undefined : { color: 'var(--primary-kernel)' }}>
               GESTOCK<span className="text-white">PRO</span>
             </h1>
           )}
         </div>
 
         <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
-          {allMenuItems.filter(item => authBridge.canAccess(user, item.id)).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                activeTab === item.id 
-                ? (isSuperAdminMode ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20')
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <item.icon size={20} className={`${activeTab === item.id ? 'text-white' : 'text-slate-500'}`} />
-              <span className="font-bold text-[10px] uppercase tracking-widest">{item.label}</span>
-            </button>
-          ))}
+          {allMenuItems.filter(item => authBridge.canAccess(user, item.id)).map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                  isActive ? (isSuperAdminMode ? 'text-white bg-rose-500' : 'text-white shadow-lg') : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+                style={!isSuperAdminMode && isActive ? { backgroundColor: 'var(--primary-kernel)' } : undefined}
+              >
+                <item.icon size={20} className={`${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <span className="font-bold text-[10px] uppercase tracking-widest">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <div className="p-4 bg-slate-800/50 m-4 rounded-2xl border border-slate-800/50">
           <div className="flex flex-col gap-3 mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-black text-white shrink-0 uppercase shadow-lg">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-white shrink-0 uppercase shadow-lg" style={{ backgroundColor: 'var(--primary-kernel)' }}>
                 {user.name.charAt(0)}
               </div>
               <div className="overflow-hidden">
                 <p className="text-sm font-black truncate">{user.name}</p>
-                <p className="text-[9px] text-indigo-400 font-bold uppercase truncate">{user.email}</p>
+                <p className="text-[9px] font-bold uppercase truncate" style={{ color: 'var(--primary-kernel)' }}>{user.email}</p>
               </div>
             </div>
           </div>
