@@ -104,7 +104,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
     const deliveredQty = productItems.reduce((sum: number, i: any) => sum + (i.quantityDelivered || 0), 0);
     const delivRate = totalQty > 0 ? Math.min(100, Math.round((deliveredQty / totalQty) * 100)) : 100;
 
-    return { payRate, delivRate, isDeliverable: productItems.length > 0 };
+    return { payRate, delivRate, deliveredQty, totalQty, isDeliverable: productItems.length > 0 };
   };
 
   const filteredSales = useMemo(() => {
@@ -404,7 +404,7 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
               ) : visibleSales.length === 0 ? (
                 <tr><td colSpan={6} className="py-20 text-center font-black text-slate-300 uppercase text-[10px]">Aucune vente trouvée</td></tr>
               ) : visibleSales.map((sale) => {
-                const { payRate, delivRate } = getRates(sale);
+                const { payRate, delivRate, deliveredQty, totalQty } = getRates(sale);
                 const isAnnule = sale.status === 'ANNULE';
                 return (
                   <tr key={sale.id} className={`hover:bg-slate-50/50 transition-all group ${isAnnule ? 'bg-rose-50/20 opacity-60' : ''}`}>
@@ -420,22 +420,24 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
                         {isAnnule && <span className="bg-rose-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">ANNULÉ</span>}
                       </div>
                     </td>
-                    <td className="px-8 py-6">
-                       <div className="flex flex-col items-center gap-1.5">
+                      <td className="px-8 py-6">
+                        <div className="flex flex-col items-center gap-1.5">
                           <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                             <div className={`h-full transition-all duration-700 ${isAnnule ? 'bg-slate-300' : payRate === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${payRate}%` }}></div>
+                            <div className={`h-full transition-all duration-700 ${isAnnule ? 'bg-slate-300' : payRate === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${payRate}%` }}></div>
                           </div>
                           <span className={`text-[8px] font-black ${isAnnule ? 'text-slate-400' : payRate === 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{payRate}% PAYÉ</span>
-                       </div>
-                    </td>
-                    <td className="px-8 py-6">
-                       <div className="flex flex-col items-center gap-1.5">
+                          <span className="text-[9px] font-black text-slate-400 mt-1">{(parseFloat(sale.amountPaid || 0)).toLocaleString()} {currency} réglés</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex flex-col items-center gap-1.5">
                           <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                             <div className={`h-full transition-all duration-700 ${isAnnule ? 'bg-slate-300' : delivRate === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${delivRate}%` }}></div>
+                            <div className={`h-full transition-all duration-700 ${isAnnule ? 'bg-slate-300' : delivRate === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${delivRate}%` }}></div>
                           </div>
                           <span className={`text-[8px] font-black ${isAnnule ? 'text-slate-400' : delivRate === 100 ? 'text-emerald-600' : 'text-indigo-600'}`}>{delivRate}% LIVRÉ</span>
-                       </div>
-                    </td>
+                          <span className="text-[9px] font-black text-slate-400 mt-1">{deliveredQty}/{totalQty} articles livrés</span>
+                        </div>
+                      </td>
                     <td className={`px-8 py-6 text-right font-black ${isAnnule ? 'text-slate-400' : 'text-slate-900'}`}>
                       {parseFloat(sale.totalTtc).toLocaleString()} {currency}
                     </td>
