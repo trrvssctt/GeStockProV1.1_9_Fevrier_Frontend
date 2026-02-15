@@ -23,6 +23,7 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
   const [actionLoading, setActionLoading] = useState(false);
   const [activeInventory, setActiveInventory] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [perPage, setPerPage] = useState<string>('25');
   
   const [filters, setFilters] = useState({
     search: '', 
@@ -46,6 +47,17 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
     if (!q) return stocks || [];
     return (stocks || []).filter(s => ((s.name || '') + ' ' + (s.sku || '')).toLowerCase().includes(q));
   }, [stocks, modalSearch]);
+
+  const totals = useMemo(() => {
+    let inCount = 0;
+    let outCount = 0;
+    (movements || []).forEach(m => {
+      const q = Number(m.qty) || 0;
+      if (m.type === 'IN') inCount += q;
+      else if (m.type === 'OUT') outCount += q;
+    });
+    return { inCount, outCount };
+  }, [movements]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -111,6 +123,13 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
     });
   }, [movements, filters]);
 
+  const displayedMovements = useMemo(() => {
+    if (!filteredMovements) return [];
+    if (perPage === 'ALL') return filteredMovements;
+    const n = parseInt(String(perPage)) || 25;
+    return filteredMovements.slice(0, n);
+  }, [filteredMovements, perPage]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20 relative">
       {activeInventory && (
@@ -131,16 +150,18 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 print:hidden">
         <div className="lg:col-span-4 grid grid-cols-1 gap-6">
-           <div className="bg-emerald-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
+            <div className="bg-emerald-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
               <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><ArrowUpCircle size={80}/></div>
               <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-1">Logistique Entrées</p>
-              <h3 className="text-3xl font-black">Réception</h3>
-           </div>
-           <div className="bg-rose-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
+              <h3 className="text-4xl font-black">{totals.inCount.toLocaleString()}</h3>
+              <p className="text-sm font-black opacity-80">Réception</p>
+            </div>
+            <div className="bg-rose-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
               <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><ArrowDownCircle size={80}/></div>
               <p className="text-[10px] font-black text-rose-300 uppercase tracking-widest mb-1">Audit des Sorties</p>
-              <h3 className="text-3xl font-black">Expédition</h3>
-           </div>
+              <h3 className="text-4xl font-black">{totals.outCount.toLocaleString()}</h3>
+              <p className="text-sm font-black opacity-80">Expédition</p>
+            </div>
         </div>
 
         <div className="lg:col-span-8 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
@@ -174,6 +195,17 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1 italic">Traçabilité logistique intégrale</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
+            Afficher
+            <select value={perPage} onChange={e => setPerPage(e.target.value)} className="ml-2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black outline-none">
+              <option value="5">5</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="ALL">Tous</option>
+            </select>
+          </label>
+
           <button 
             onClick={() => setShowFilters(!showFilters)}
             className={`p-4 rounded-2xl transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${showFilters ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 hover:text-indigo-600'}`}
@@ -267,7 +299,7 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                    <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" /></td></tr>
                 ) : filteredMovements.length === 0 ? (
                    <tr><td colSpan={7} className="py-20 text-center text-slate-300 uppercase font-black text-[10px]">Aucun flux trouvé dans les critères</td></tr>
-                ) : filteredMovements.map((m: any) => {
+                 ) : displayedMovements.map((m: any) => {
                    const p = m.stock_item || m.stockItem || m.StockItem;
                    return (
                    <tr key={m.id} className="hover:bg-slate-50/50 transition-all group">
