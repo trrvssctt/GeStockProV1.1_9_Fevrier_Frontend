@@ -314,7 +314,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                              onClick={() => handleDownloadInvoice(p.id)}
                              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm group"
                            >
-                              <FileDown size={14} className="group-hover:animate-bounce" /> Facture PDF
+                              <FileDown size={14} className="group-hover:animate-bounce" /> Réçu de paiement
                            </button>
                         </td>
                      </tr>
