@@ -28,6 +28,7 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
     invoicePrefix: 'INV-',
     legalMentions: 'Paiement à réception. Escompte pour paiement anticipé : néant.',
     primaryColor: '#4f46e5',
+    buttonColor: '#63452c',
     logoUrl: '', 
     factureUrl: '', 
     cachetUrl: ''  
@@ -35,7 +36,8 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary-kernel', formData.primaryColor);
-  }, [formData.primaryColor]);
+    document.documentElement.style.setProperty('--button-kernel', formData.buttonColor || '#63452c');
+  }, [formData.primaryColor, formData.buttonColor]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'factureUrl' | 'cachetUrl') => {
     const file = e.target.files?.[0];
@@ -93,6 +95,7 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
         invoicePrefix: formData.invoicePrefix,
         invoiceFooter: formData.legalMentions,
         primaryColor: formData.primaryColor,
+        buttonColor: formData.buttonColor,
         logoUrl: formData.logoUrl,
         onboardingCompleted: true
       };
@@ -124,7 +127,7 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
   return (
     <div className="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center p-6 overflow-hidden font-sans">
       <style>{`
-        :root { --primary-kernel: ${formData.primaryColor}; }
+        :root { --primary-kernel: ${formData.primaryColor}; --button-kernel: ${formData.buttonColor || '#63452c'}; }
         .bg-kernel { background-color: var(--primary-kernel); }
         .text-kernel { color: var(--primary-kernel); }
         .border-kernel { border-color: var(--primary-kernel); }
@@ -176,15 +179,15 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
                   <h3 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Pilotage Financier</h3>
                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Définit vos calculs de marge et de taxes par défaut.</p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-8">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Devise Système</label>
-                    <select value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-3xl px-6 py-5 text-sm font-black outline-none focus:ring-4 focus:ring-kernel/10 shadow-inner appearance-none cursor-pointer">
+                      <select value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-3xl px-6 py-5 text-sm font-black outline-none focus:ring-4 focus:ring-kernel/10 shadow-inner appearance-none cursor-pointer">
                       <option value="F CFA">Franc CFA (F CFA)</option>
                       <option value="€">Euro (€)</option>
                       <option value="$">US Dollar ($)</option>
                     </select>
+                      
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Taux TVA Standard (%)</label>
@@ -205,22 +208,26 @@ const OnboardingWizard: React.FC<Props> = ({ onComplete, companyName, user }) =>
                 </div>
 
                 <div className="space-y-10">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-5 px-2">Thème de l'Instance</label>
-                    <div className="flex flex-wrap gap-4">
-                      {['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#0f172a', '#7c3aed'].map(color => (
-                        <button 
-                          key={color} 
-                          onClick={() => setFormData({...formData, primaryColor: color})}
-                          className={`w-12 h-12 rounded-2xl transition-all relative flex items-center justify-center ${formData.primaryColor === color ? 'ring-4 ring-offset-2 ring-kernel scale-110' : 'hover:scale-105'}`}
-                          style={{ backgroundColor: color }}
-                        >
-                          {formData.primaryColor === color && <Check size={20} className="text-white" />}
-                        </button>
-                      ))}
+                  <div className="mt-6 p-4 bg-white rounded-2xl border border-slate-100">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Thème de l'Instance</label>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase">Couleur boutton</div>
+                        <input type="color" value={formData.primaryColor || '#0f172a'} onChange={e => setFormData({...formData, primaryColor: e.target.value})} className="w-12 h-12 rounded-xl border-none p-0" />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase">Couleur principale</div>
+                        <input type="color" value={formData.buttonColor || '#63452c'} onChange={e => setFormData({...formData, buttonColor: e.target.value})} className="w-12 h-12 rounded-xl border-none p-0" />
+                      </div>
+
+                      <div className="flex items-center gap-2 ml-2">
+                        {['#0f172a', '#4f46e5', '#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#63452c'].map(c => (
+                          <button key={c} onClick={() => setFormData({...formData, primaryColor: c})} className="w-8 h-8 rounded-md shadow-sm" style={{ backgroundColor: c }} />
+                        ))}
+                      </div>
                     </div>
                   </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="relative group">
                       <input type="file" id="logo_up" hidden onChange={e => handleFileUpload(e, 'logoUrl')} accept="image/*" />

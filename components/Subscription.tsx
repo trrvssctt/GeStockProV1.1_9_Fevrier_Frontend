@@ -37,6 +37,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showPayCurrentModal, setShowPayCurrentModal] = useState(false);
 
   // État pour l'aperçu de facture d'abonnement
   const [showDocGenerator, setShowDocGenerator] = useState<{ sale: any, mode: 'SUBSCRIPTION_INVOICE' } | null>(null);
@@ -78,10 +79,8 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
   }, [currentSubscription, availablePlans]);
 
   const filteredPlans = useMemo(() => {
-    const currentPrice = Number(currentPlan?.price || 0);
-    return (availablePlans || [])
-      .filter(p => p.id !== 'FREE_TRIAL')
-      .filter(p => Number(p?.price || 0) > currentPrice);
+    // Show all other plans to the user (exclude FREE_TRIAL and the current plan)
+    return (availablePlans || []).filter(p => p.id !== 'FREE_TRIAL' && p.id !== currentPlan?.id);
   }, [availablePlans, currentPlan]);
 
   const handleUpgradeClick = (plan: SubscriptionPlan) => {
@@ -158,7 +157,9 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
         planId: selectedPlan.id,
         paymentMethod: operator || paymentMethod,
         transactionId,
-        status: 'PENDING'
+        status: 'PENDING',
+        notifyAdmin: true,
+        reference: transactionId
       };
 
       await apiClient.post('/billing/upgrade', payload);
@@ -200,6 +201,39 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
     }
   };
 
+  const handlePayCurrentClick = () => {
+    setPaymentMethod(null);
+    setOperator(null);
+    setTxReference('');
+    setShowPayCurrentModal(true);
+  };
+
+  const processPayNow = async () => {
+    if (!currentSubscription || !currentPlan) return;
+    setIsProcessing(true);
+    try {
+      const transactionId = operator === 'WAVE' ? txReference : `TX-${Date.now()}`;
+      const payload = {
+        subscriptionId: currentSubscription.id,
+        amount: currentPlan.price,
+        period: 'MONTH',
+        transactionId,
+        paymentMethod: operator || paymentMethod,
+        notifyAdmin: true,
+        reference: transactionId
+      };
+
+      await apiClient.post('/billing/pay', payload);
+      showToast('Paiement enregistré. Merci.', 'success');
+      fetchData();
+      setShowPayCurrentModal(false);
+    } catch (err: any) {
+      showToast('Erreur : ' + (err.message || 'Erreur Kernel'), 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleDownloadInvoice = async (paymentId: string) => {
     try {
       const invoiceData = await apiClient.get(`/billing/invoice/${paymentId}`);
@@ -211,6 +245,8 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
         createdAt: invoiceData.date,
         totalTtc: invoiceData.amount,
         amountPaid: invoiceData.amount,
+        // mark whether the SuperAdmin has validated this subscription/payment
+        isValidated: invoiceData.tenant?.paymentStatus === 'UP_TO_DATE' || !!invoiceData.paymentValidated,
         customer: {
            companyName: invoiceData.tenant.name,
            billingAddress: invoiceData.tenant.address,
@@ -274,6 +310,11 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                      <Calendar size={14} className="text-indigo-400" />
                      {currentSubscription?.nextBillingDate ? new Date(currentSubscription.nextBillingDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
                   </p>
+                <div className="mt-3">
+                  <button onClick={handlePayCurrentClick} className="px-4 py-2 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all">
+                   PAYER CE MOIS — {currentPlan?.price?.toLocaleString()} {currency}
+                  </button>
+                </div>
                </div>
             </div>
           </div>
@@ -487,6 +528,54 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {/* MODAL PAYER ABONNEMENT COURANT */}
+      {showPayCurrentModal && (
+        <div className="fixed inset-0 z-[850] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-2xl rounded-[4rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500 flex flex-col max-h-[90vh]">
+            <div className="px-10 py-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg"><RefreshCw size={24}/></div>
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Payer l'abonnement</h3>
+                  <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mt-1">Vous payez le mois suivant</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPayCurrentModal(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><X size={24}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-12 space-y-6 custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                <div className="flex flex-col items-center gap-4">
+                  <img src={waveQr} alt="Wave QR" className="w-48 h-48 object-contain rounded-xl shadow-md border" />
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-center">Scannez le QR avec l'application Wave puis renseignez la référence de transaction ci-dessous.</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[2.5rem] flex justify-between items-center">
+                    <div>
+                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Période</p>
+                      <p className="text-sm font-black uppercase tracking-widest">{currentSubscription?.nextBillingDate ? new Date(currentSubscription.nextBillingDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Montant à payer</p>
+                      <p className="text-3xl font-black text-indigo-600">{currentPlan?.price?.toLocaleString()} {currency}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Référence de transaction</label>
+                    <input type="text" placeholder="Référence (ex: Wave TX)" value={txReference} onChange={e => setTxReference(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10" />
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button onClick={() => setShowPayCurrentModal(false)} className="flex-1 py-4 border-2 border-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">ANNULER</button>
+                    <button onClick={processPayNow} disabled={isProcessing || !txReference} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all">{isProcessing ? 'PROCESSING...' : `PAYER ${currentPlan?.price?.toLocaleString()} ${currency}`}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

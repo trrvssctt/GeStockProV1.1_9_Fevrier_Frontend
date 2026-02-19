@@ -137,7 +137,7 @@ const DocumentPreview: React.FC<DocumentProps> = ({ type, sale, tenant, currency
                 <Truck size={20}/>
                 <span className="text-lg font-black uppercase tracking-tight">LOGISTIQUE SORTIE</span>
               </div>
-           ) : (isPaid || isSubInvoice) && (
+          ) : (isPaid || (isSubInvoice && sale?.isValidated)) && (
              <div className="inline-flex items-center justify-end gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-2xl w-fit ml-auto border border-emerald-100">
                 <CheckCircle2 size={20}/>
                 <span className="text-lg font-black uppercase tracking-tight">SOLDE ENCAISSÉ</span>
@@ -232,9 +232,16 @@ const DocumentPreview: React.FC<DocumentProps> = ({ type, sale, tenant, currency
            </p>
            <div className="h-32 flex items-center justify-center relative">
               {isSubInvoice ? (
-                 <div className="border-4 border-indigo-600/30 text-indigo-600 rounded-full px-6 py-2 rotate-12 font-black uppercase text-xl animate-in fade-in">
-                  GESTORPRO
-                 </div>
+                 // For subscription invoices we only show the official GESTORPRO stamp
+                 // when the subscription/payment has been validated by the SuperAdmin.
+                 sale?.isValidated ? (
+                   <div className="border-4 border-indigo-600/30 text-indigo-600 rounded-full px-6 py-2 rotate-12 font-black uppercase text-xl animate-in fade-in">
+                     GESTORPRO
+                   </div>
+                 ) : (
+                   // No cachet yet: show empty placeholder to keep layout
+                   <div className="w-full h-24 border-2 border-dashed border-slate-100 rounded-xl" />
+                 )
               ) : isPaid && !isBonSortie && tenant.cachetUrl ? (
                 <img 
                   src={tenant.cachetUrl} 

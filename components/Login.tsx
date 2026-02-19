@@ -8,6 +8,7 @@ import {
   Terminal, Shield, Smartphone
 } from 'lucide-react';
 import { User, SubscriptionPlan, UserRole } from '../types';
+import logo from '../assets/logo_gestockpro.png';
 import { authBridge } from '../services/authBridge';
 import { apiClient, ApiError } from '../services/api';
 
@@ -31,7 +32,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const [regData, setRegData] = useState({
     planId: '', companyName: '', siret: '', address: '', phone: '',
-    paymentMethod: 'Orange Money', adminName: '', adminEmail: '', adminPassword: ''
+    paymentMethod: 'Orange Money', adminName: '', adminEmail: '', adminPassword: '',
+    primaryColor: '#0f172a', buttonColor: '#63452c'
   });
 
   useEffect(() => {
@@ -180,6 +182,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     const payload = {
       companyName: regData.companyName, siret: regData.siret, phone: regData.phone, address: regData.address,
       planId: regData.planId, paymentMethod: regData.paymentMethod,
+      primaryColor: regData.primaryColor, buttonColor: regData.buttonColor,
       admin: { name: regData.adminName, email: regData.adminEmail, password: regData.adminPassword }
     };
 
@@ -244,6 +247,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <div className="relative"><Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} /><input type="tel" required value={regData.phone} onChange={e => setRegData({...regData, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10" placeholder="Téléphone Entreprise" /></div>
               <div className="relative"><MapPin className="absolute left-5 top-4 text-slate-300" size={18} /><textarea required value={regData.address} onChange={e => setRegData({...regData, address: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-6 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 min-h-[100px]" placeholder="Adresse du Siège Social" /></div>
             </div>
+            
             <div className="flex gap-4 mt-8">
               <button onClick={() => setRegStep(1)} className="px-8 py-5 border-2 border-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">RETOUR</button>
               <button onClick={() => setRegStep(3)} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 shadow-xl">CRÉER L'ADMIN <ArrowRight size={18} /></button>
@@ -278,10 +282,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       
       <div className={`w-full transition-all duration-700 ${mode === 'REGISTER' ? 'max-w-5xl' : 'max-w-md'}`}>
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-2xl mb-6 backdrop-blur-md">
-            <Zap size={18} className={mode === 'SUPERADMIN' ? 'text-rose-500' : 'text-indigo-500'} />
-            <span className="text-sm font-black text-white tracking-tight uppercase">GeStoc<span className={mode === 'SUPERADMIN' ? 'text-rose-400' : 'text-indigo-400'}>Pro</span> {mode === 'SUPERADMIN' ? 'Master' : 'Enterprise'}</span>
-          </div>
+          
+          <img src={logo} alt="GeStockPro" className="mx-auto mb-4 h-14" />
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter">
             {mode === 'REGISTER' ? 'Déploiement Instance SaaS' : mode === 'SUPERADMIN' ? 'Console Maître Kernel' : mode === 'MFA' ? 'Vérification de Sécurité' : 'Accès Privé GeStock'}
           </h1>

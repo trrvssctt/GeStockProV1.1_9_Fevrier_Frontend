@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Globe, Users, CreditCard, Activity, AlertTriangle, 
@@ -17,9 +16,10 @@ import {
 import { apiClient } from '../services/api';
 import { useToast } from './ToastProvider';
 
-const SuperAdmin = () => {
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TENANTS' | 'SUBSCRIPTIONS' | 'PLANS' | 'UPGRADES' | 'BILLING_ALERTS'>('DASHBOARD');
-  const [loading, setLoading] = useState(true);
+const SuperAdmin: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'VALIDATIONS' | 'TENANTS' | 'SUBSCRIPTIONS' | 'PLANS' | 'UPGRADES' | 'BILLING_ALERTS' | 'LOGS'>('DASHBOARD');
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [tenants, setTenants] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
@@ -33,185 +33,120 @@ const SuperAdmin = () => {
   const [billingUpcoming, setBillingUpcoming] = useState<any[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
   const [search, setSearch] = useState('');
-  
-  // Modals
-  const [showPlanModal, setShowPlanModal] = useState<any>(null);
   const [showBillingDetail, setShowBillingDetail] = useState<any>(null);
-  const [confirmAction, setConfirmAction] = useState<any>(null); // { title, msg, action, icon, type }
-  const [actionLoading, setActionLoading] = useState(false);
-  
-  const [planForm, setPlanForm] = useState({ 
-    id: '', 
-    name: '', 
-    priceMonthly: 0, 
-    priceYearly: 0, 
-    maxUsers: 1, 
+  const [showPlanModal, setShowPlanModal] = useState<any>(null);
+  const [planForm, setPlanForm] = useState({
+    id: '',
+    name: '',
+    priceMonthly: 0,
+    priceYearly: 0,
+    maxUsers: 1,
     hasAiChatbot: false,
-    hasStockForecast: false
+    hasStockForecast: false,
+    isActive: true
   });
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    msg: string;
+    icon: any;
+    type: 'danger' | 'success' | 'warning';
+    action: () => Promise<void>;
+  } | null>(null);
+  
+  // Filtres pour les paiements
+  const [paymentFilterMethod, setPaymentFilterMethod] = useState('ALL');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentPageSize, setPaymentPageSize] = useState(25);
+
+  const showToast = useToast();
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'DASHBOARD') {
-        const res = await apiClient.get('/admin/dashboard');
-        setData(res);
-      } else if (activeTab === 'TENANTS' || activeTab === 'SUBSCRIPTIONS') {
-        const res = await apiClient.get('/admin/tenants');
-        setTenants(res || []);
-      } else if (activeTab === 'PLANS') {
-        const res = await apiClient.get('/admin/plans');
-        setPlans(res || []);
-      } else if (activeTab === 'UPGRADES') {
-        const res = await apiClient.get('/admin/upgrade-requests');
-        setUpgradeRequests(res || []);
-      } else if (activeTab === 'BILLING_ALERTS') {
-        try {
-          setBillingLoading(true);
-          const tenantsRes = await apiClient.get('/admin/tenants');
-          setTenants(tenantsRes || []);
-          const dash = await apiClient.get('/admin/dashboard');
-          const upcoming = Array.isArray(dash?.subscriptionAlerts) ? dash.subscriptionAlerts : [];
-          // Overdue heuristics: tenant.paymentStatus not up-to-date OR subscription status not ACTIVE OR nextBillingDate in the past
-          const now = new Date();
-          const overdue = (tenantsRes || []).filter((t: any) => {
-            const next = t.subscription?.nextBillingDate ? new Date(t.subscription.nextBillingDate) : null;
-            return (t.paymentStatus && t.paymentStatus !== 'UP_TO_DATE') || (t.subscription && t.subscription.status !== 'ACTIVE') || (next && next < now);
-          });
-          setBillingOverdue(overdue || []);
-          setBillingUpcoming(upcoming || []);
-        } catch (err) {
-          console.error('Billing alerts fetch error', err);
-          setBillingOverdue([]);
-          setBillingUpcoming([]);
-        } finally {
-          setBillingLoading(false);
-        }
-      } else if (activeTab === 'LOGS') {
-        try {
-          setLogsLoading(true);
-          const tenantsRes = await apiClient.get('/admin/tenants');
-          setTenants(tenantsRes || []);
-          const logsRes = await apiClient.get('/admin/logs');
-          setLogs(logsRes || []);
-        } finally {
-          setLogsLoading(false);
-        }
-      }
-    } catch (err) {
-      console.error("SuperAdmin Master Sync Error:", err);
+      const [statsRes, tenantsRes, plansRes] = await Promise.all([
+        apiClient.get('/admin/dashboard'),
+        apiClient.get('/admin/tenants'),
+        apiClient.get('/admin/plans')
+      ]);
+
+      setData(statsRes);
+      setTenants(tenantsRes || []);
+      setPlans(plansRes || []);
+      // Admin dashboard already returns pending validations / upgrade requests
+      setUpgradeRequests(statsRes?.pendingValidations || []);
+
+      // Récupérer les alertes de facturation
+      fetchBillingAlerts();
+    } catch (err: any) {
+      showToast(`Erreur lors du chargement: ${err?.message || err}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [activeTab]);
-
-  const showToast = useToast();
+  const fetchBillingAlerts = async () => {
+    setBillingLoading(true);
+    try {
+      const [overdue, upcoming] = await Promise.all([
+        apiClient.get('/admin/billing/overdue'),
+        apiClient.get('/admin/billing/upcoming')
+      ]);
+      setBillingOverdue(overdue || []);
+      setBillingUpcoming(upcoming || []);
+    } catch (err) {
+      console.error('Erreur fetch billing alerts', err);
+    } finally {
+      setBillingLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (activeTab === 'LOGS') {
-      fetchLogs(logTenantFilter, logUserFilter);
-    }
-  }, [logTenantFilter, logUserFilter, activeTab]);
+    fetchData();
+  }, []);
 
-  const recentPendingValidations = (Array.isArray(data?.pendingValidations) ? [...data.pendingValidations] : [])
-    .sort((a: any, b: any) => {
-      const ta = new Date(a?.requestedAt || a?.createdAt || a?.paymentDate || 0).getTime();
-      const tb = new Date(b?.requestedAt || b?.createdAt || b?.paymentDate || 0).getTime();
-      return tb - ta;
-    })
-    .slice(0, 5);
+  // Récupérer les validations récentes pour le dashboard
+  const recentPendingValidations = Array.isArray(data?.pendingValidations) 
+    ? data.pendingValidations.slice(0, 5) 
+    : [];
 
-  const handleToggleLock = (id: string, name: string, isCurrentlyActive: boolean) => {
+  const handleToggleLock = (tenantId: string, tenantName: string, currentStatus: boolean) => {
     setConfirmAction({
-      title: isCurrentlyActive ? "Verrouiller l'Instance" : "Réactiver l'Instance",
-      msg: isCurrentlyActive 
-        ? `Voulez-vous révoquer l'accès immédiat pour "${name}" ? Toutes les sessions seront déconnectées.`
-        : `Voulez-vous restaurer l'accès pour "${name}" ?`,
-      icon: isCurrentlyActive ? Ban : Power,
-      type: isCurrentlyActive ? 'danger' : 'success',
+      title: currentStatus ? 'VERROUILLER L\'INSTANCE' : 'DÉVERROUILLER L\'INSTANCE',
+      msg: currentStatus 
+        ? `Confirmez-vous le verrouillage immédiat de "${tenantName}" ? L'accès sera coupé.` 
+        : `Confirmez-vous la réactivation de "${tenantName}" ?`,
+      icon: currentStatus ? Ban : Power,
+      type: currentStatus ? 'danger' : 'success',
       action: async () => {
+        setActionLoading(true);
         try {
-          await apiClient.post(`/admin/tenants/${id}/toggle-lock`, {});
+          await apiClient.post(`/admin/tenants/${tenantId}/toggle-lock`, {});
+          showToast(`Instance ${currentStatus ? 'verrouillée' : 'déverrouillée'} avec succès`, 'success');
           fetchData();
           setConfirmAction(null);
-          } catch (err: any) { 
-            showToast(`Échec Kernel : ${err.message || 'Erreur interne'}`, 'error');
-            setConfirmAction(null);
-          }
+        } catch (err: any) {
+          showToast(`Erreur: ${err?.message || err}`, 'error');
+          setConfirmAction(null);
+        } finally {
+          setActionLoading(false);
+        }
       }
     });
   };
 
   const handleValidateSubscription = (validation: any) => {
-    const tenantId = validation?.tenantId || validation?.id || validation?.tenant?.id;
-    const tenantName = validation?.tenantName || validation?.tenant?.name || validation?.tenant?.domain || 'Instance';
     setConfirmAction({
-      title: 'Valider l\'Abonnement',
-      msg: `Confirmez-vous l'activation de l'abonnement pour "${tenantName}" ?`,
-      icon: Check,
+      title: 'VALIDER LE PAIEMENT',
+      msg: `Valider le paiement pour ${validation.tenantName || validation.tenant?.name || 'cette instance'} ?`,
+      icon: CheckCircle2,
       type: 'success',
       action: async () => {
         setActionLoading(true);
         try {
-          // Determine amount/method/reference before calling backend so backend can record same payment
-          let amount: number | undefined = undefined;
-          const candidates = [validation?.amount, validation?.amountPaid, validation?.planPrice, validation?.planMonthly, validation?.payment?.amount, validation?.amount_paid];
-          for (const c of candidates) {
-            if (typeof c === 'number' && !isNaN(c) && c > 0) { amount = c; break; }
-            if (typeof c === 'string' && !isNaN(Number(c)) && Number(c) > 0) { amount = Number(c); break; }
-          }
+          const tenantId = validation.tenantId || validation.id || validation.tenant?.id;
+          let amount = validation.amount || validation.planPrice || 0;
 
-          if (!amount) {
-
-      const handleProcessMonthly = () => {
-        const candidates = (Array.isArray(data?.pendingValidations) ? data.pendingValidations : [])
-          .map((v: any) => ({ tenantId: v.tenantId || v.id, validation: v }));
-
-        // fallback to tenants list when pendingValidations not provided
-        if (candidates.length === 0 && Array.isArray(tenants)) {
-          tenants.forEach(t => {
-            if (!t.subscription || t.subscription?.status !== 'ACTIVE') {
-              candidates.push({ tenantId: t.id, validation: t });
-            }
-          });
-        }
-
-        if (candidates.length === 0) {
-          showToast('Aucun abonnement à traiter ce mois.', 'info');
-          return;
-        }
-
-        setConfirmAction({
-          title: 'Lancer le traitement mensuel',
-          msg: `Voulez-vous lancer le traitement automatique pour ${candidates.length} instance(s) ? Ceci validera les paiements détectés et mettra à jour les abonnements.`,
-          icon: Clock,
-          type: 'success',
-          action: async () => {
-            setActionLoading(true);
-            try {
-              for (const c of candidates) {
-                const id = c.tenantId;
-                // derive an amount similar to single-validate flow
-                let amount = 0;
-                const tenantRecord = tenants.find(t => t.id === id) || c.validation || {};
-                amount = tenantRecord.subscription?.planDetails?.priceMonthly || tenantRecord.planPrice || tenantRecord.plan?.price || tenantRecord.amount || 0;
-                const reference = `AUTO-BILL-${Date.now()}-${String(id).slice(0,8)}`;
-                await apiClient.post(`/admin/tenants/${id}/subscription/validate`, { amount, method: 'STRIPE', reference, transactionId: reference });
-              }
-              fetchData();
-              setConfirmAction(null);
-              showToast('Traitement mensuel terminé.', 'success');
-            } catch (err: any) {
-              showToast(`Erreur lors du traitement mensuel: ${err?.message || err}`, 'error');
-              setConfirmAction(null);
-            } finally {
-              setActionLoading(false);
-            }
-          }
-        });
-      };
+          if (!amount && validation.planId) {
             const plan = plans.find((p: any) => p.id === validation?.planId || String(p.id) === String(validation?.planId));
             if (plan) amount = plan.priceMonthly || plan.price || 0;
           }
@@ -257,7 +192,9 @@ const SuperAdmin = () => {
       action: async () => {
         setActionLoading(true);
         try {
-          await apiClient.post(`/admin/upgrade-requests/${request.id}/approve`, {});
+          // Approve by validating the tenant subscription
+          const tenantId = request.tenantId || request.tenant?.id || request.id;
+          await apiClient.post(`/admin/tenants/${tenantId}/subscription/validate`, {});
           fetchData();
           setConfirmAction(null);
         } catch (err: any) {
@@ -277,7 +214,9 @@ const SuperAdmin = () => {
       action: async () => {
         setActionLoading(true);
         try {
-          await apiClient.post(`/admin/upgrade-requests/${request.id}/reject`, {});
+          // Reject by calling the admin reject endpoint for tenant subscription
+          const tenantId = request.tenantId || request.tenant?.id || request.id;
+          await apiClient.post(`/admin/tenants/${tenantId}/subscription/reject`, {});
           fetchData();
           setConfirmAction(null);
         } catch (err: any) {
@@ -313,6 +252,33 @@ const SuperAdmin = () => {
       setLogs([]);
     } finally {
       setLogsLoading(false);
+    }
+  };
+
+  // Reusable email sender for reminders/notifications with UX feedback
+  const sendEmail = async ({ tenantId, tenantName, toEmail, subject, body }: { tenantId?: string; tenantName?: string; toEmail?: string; subject: string; body: string }) => {
+    setActionLoading(true);
+    try {
+      const payload: any = { subject, body };
+      if (tenantId) payload.tenantId = tenantId;
+      if (tenantName) payload.tenantName = tenantName;
+      if (toEmail) payload.toEmail = toEmail;
+
+      const res = await apiClient.post('/admin/email/send', payload);
+      // show server info when available
+      if (res && (res.message || res.info)) {
+        showToast(String(res.message || res.info), 'success');
+      } else {
+        showToast('Message placé en file ou envoyé.', 'success');
+      }
+      fetchData();
+      return res;
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Erreur envoi email';
+      showToast(msg, 'error');
+      throw err;
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -385,6 +351,7 @@ const SuperAdmin = () => {
           <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 w-fit mt-4 overflow-x-auto max-w-[80vw]">
             {[
               { id: 'DASHBOARD', label: 'Dashboard Financier', icon: BarChart3 },
+              { id: 'VALIDATIONS', label: 'Validation Paiements', icon: CheckCircle2 },
               { id: 'TENANTS', label: 'Comptes & Users', icon: Globe },
               { id: 'SUBSCRIPTIONS', label: 'Facturation SaaS', icon: CreditCard },
               { id: 'PLANS', label: 'Catalogue Offres', icon: Layers },
@@ -484,6 +451,132 @@ const SuperAdmin = () => {
                       )}
                    </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'VALIDATIONS' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl p-4">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs font-black text-slate-400 uppercase">Filtrer</label>
+                    <select value={paymentFilterMethod} onChange={e => setPaymentFilterMethod(e.target.value)} className="bg-slate-950 text-white rounded-xl px-3 py-2 text-sm">
+                      <option value="ALL">Tous</option>
+                      <option value="WAVE">WAVE</option>
+                      <option value="STRIPE">STRIPE</option>
+                      <option value="CARD">CARD</option>
+                      <option value="MOBILE">MOBILE</option>
+                    </select>
+                    <input placeholder="Référence..." value={paymentSearch} onChange={e => setPaymentSearch(e.target.value)} className="bg-slate-950 text-white rounded-xl px-3 py-2 text-sm" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs font-black text-slate-400 uppercase">Afficher</label>
+                    <select value={paymentPageSize} onChange={e => setPaymentPageSize(parseInt(e.target.value))} className="bg-slate-950 text-white rounded-xl px-3 py-2 text-sm">
+                      <option value={5}>5</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={-1}>Tous</option>
+                    </select>
+                  </div>
+                </div>
+
+                <table className="w-full text-left">
+                  <thead className="bg-slate-950 border-b border-slate-800">
+                    <tr className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                      <th className="px-8 py-5">Date</th>
+                      <th className="px-8 py-5">Référence</th>
+                      <th className="px-8 py-5">Méthode</th>
+                      <th className="px-8 py-5 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {(() => {
+                      const payments = Array.isArray(showBillingDetail?.payments) ? showBillingDetail.payments : [];
+                      const filtered = payments
+                        .filter((p: any) => {
+                          const methodOk = paymentFilterMethod === 'ALL' || String((p.method || '').toUpperCase()) === String(paymentFilterMethod);
+                          const searchOk = !paymentSearch || String((p.reference || p.id || '')).toLowerCase().includes(paymentSearch.toLowerCase());
+                          return methodOk && searchOk;
+                        })
+                        .sort((a: any, b: any) => { 
+                          const ta = new Date(b.paymentDate || b.createdAt).getTime(); 
+                          const tb = new Date(a.paymentDate || a.createdAt).getTime(); 
+                          return ta - tb; 
+                        });
+
+                      const limited = paymentPageSize === -1 ? filtered : filtered.slice(0, paymentPageSize || 25);
+
+                      if (limited.length === 0) {
+                        return (<tr><td colSpan={4} className="py-20 text-center text-[10px] font-black text-slate-600 uppercase">Aucun paiement d'abonnement détecté</td></tr>);
+                      }
+
+                      return limited.map((p: any) => (
+                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-8 py-5 text-xs text-white font-bold">
+                            {new Date(p.paymentDate || p.createdAt).toLocaleDateString('fr-FR')} {new Date(p.paymentDate || p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-8 py-5 text-xs font-mono text-indigo-400 font-black">
+                            #{p.reference || String(p.id).slice(0,12)}
+                          </td>
+                          <td className="px-8 py-5">
+                            <span className="px-3 py-1 bg-slate-800 rounded-lg text-[10px] font-black uppercase">
+                              {(p.method || 'UNKNOWN').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-8 py-5 text-right text-white font-black">
+                            {Number(p.amount || 0).toLocaleString('fr-FR')} F
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl p-4">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-950 border-b border-slate-800">
+                    <tr className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                      <th className="px-8 py-5">Instance</th>
+                      <th className="px-8 py-5">Plan</th>
+                      <th className="px-8 py-5">Montant</th>
+                      <th className="px-8 py-5">Demande</th>
+                      <th className="px-8 py-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {data?.pendingValidations?.map((v: any) => (
+                      <tr key={v.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-8 py-6">
+                          <p className="font-black text-white uppercase text-sm">{v.tenantName || v.tenant?.name || 'Inconnu'}</p>
+                          <p className="text-[9px] text-slate-500 font-mono">{v.tenantId || v.id}</p>
+                        </td>
+                        <td className="px-8 py-6">
+                          <span className="text-[9px] font-black text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-lg uppercase">
+                            {v.planId || v.subscription?.planName}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6 text-white font-black">
+                          {Number(v.amount || v.planPrice || 0).toLocaleString()} F
+                        </td>
+                        <td className="px-8 py-6 text-xs text-slate-400">
+                          {v.requestedAt ? new Date(v.requestedAt).toLocaleString() : v.nextBillingDate ? new Date(v.nextBillingDate).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-8 py-6 text-right">
+                          <div className="flex items-center justify-end gap-3">
+                            <button onClick={() => openBillingDetail(v.tenant || v.id)} className="p-3 bg-slate-800 text-white rounded-xl hover:bg-rose-500 transition-all flex items-center gap-2 text-[9px] font-black uppercase ml-auto">
+                              <Eye size={14}/> DÉTAILS
+                            </button>
+                            <button onClick={() => handleValidateSubscription(v)} className="p-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all flex items-center gap-2 text-[9px] font-black uppercase">
+                              <Check size={14}/> VALIDER
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -607,7 +700,7 @@ const SuperAdmin = () => {
           {activeTab === 'PLANS' && (
             <div className="space-y-8 animate-in slide-in-from-bottom-6">
               <div className="flex justify-end">
-                <button onClick={() => { setPlanForm({ id: '', name: '', priceMonthly: 0, priceYearly: 0, maxUsers: 1, hasAiChatbot: false, hasStockForecast: false }); setShowPlanModal(true); }} className="px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest flex items-center gap-3 shadow-xl hover:bg-rose-500 transition-all">
+                <button onClick={() => { setPlanForm({ id: '', name: '', priceMonthly: 0, priceYearly: 0, maxUsers: 1, hasAiChatbot: false, hasStockForecast: false, isActive: true }); setShowPlanModal(true); }} className="px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest flex items-center gap-3 shadow-xl hover:bg-rose-500 transition-all">
                   <Plus size={20}/> FORGER UNE NOUVELLE OFFRE
                 </button>
               </div>
@@ -674,7 +767,7 @@ const SuperAdmin = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => openBillingDetail(t.id)} className="px-3 py-2 bg-indigo-600 text-white rounded-2xl text-xs font-black">Voir Détails</button>
-                            <button onClick={async () => { try { await apiClient.post('/admin/email/send', { tenantId: t.id, subject: 'Rappel de paiement', body: `Bonjour ${t.name}, nous avons constaté un retard de paiement.` }); showToast('Rappel envoyé.', 'success'); } catch (e) { showToast('Erreur envoi', 'error'); } }} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black">Envoyer Rappel</button>
+                            <button onClick={async () => { try { await sendEmail({ tenantId: t.id, subject: 'Rappel de paiement', body: `Bonjour ${t.name}, nous avons constaté un retard de paiement.` }); } catch (e) {} }} disabled={actionLoading} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black disabled:opacity-40">Envoyer Rappel</button>
                           </div>
                         </div>
                       ))}
@@ -692,12 +785,55 @@ const SuperAdmin = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => { /* find tenant id by name and open billing */ const t = tenants.find(tt => tt.name === (u.tenant || u.tenantName)); if (t) openBillingDetail(t.id); else showToast('Ouvrir détails indisponible', 'error'); }} className="px-3 py-2 bg-indigo-600 text-white rounded-2xl text-xs font-black">Voir Détails</button>
-                            <button onClick={async () => { try { await apiClient.post('/admin/email/send', { tenantName: u.tenant || u.tenantName, subject: 'Votre abonnement arrive à échéance', body: `Bonjour, votre prochain prélèvement est prévu le ${u.nextBillingDate ? new Date(u.nextBillingDate).toLocaleDateString() : 'prochainement'}.` }); showToast('Notification envoyée.', 'success'); } catch (e) { showToast('Erreur envoi', 'error'); } }} className="px-3 py-2 bg-amber-500 text-white rounded-2xl text-xs font-black">Notifier</button>
+                            <button onClick={async () => { try { const tenantRecord = tenants.find(tt => tt.name === (u.tenant || u.tenantName)); await sendEmail({ tenantId: tenantRecord?.id, tenantName: u.tenant || u.tenantName, subject: 'Votre abonnement arrive à échéance', body: `Bonjour, votre prochain prélèvement est prévu le ${u.nextBillingDate ? new Date(u.nextBillingDate).toLocaleDateString() : 'prochainement'}.` }); } catch (e) {} }} disabled={actionLoading} className="px-3 py-2 bg-amber-500 text-white rounded-2xl text-xs font-black disabled:opacity-40">Notifier</button>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'UPGRADES' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-6 overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-black uppercase text-white">Traitement des demandes d'upgrade</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black text-slate-500 uppercase">{upgradeRequests.length} demandes</span>
+                    <button onClick={fetchData} className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-950 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      <tr>
+                        <th className="px-6 py-3">Instance</th>
+                        <th className="px-6 py-3">Offre courante</th>
+                        <th className="px-6 py-3">Offre demandée</th>
+                        <th className="px-6 py-3">Message</th>
+                        <th className="px-6 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {upgradeRequests.length === 0 ? (
+                        <tr><td colSpan={5} className="py-12 text-center text-slate-500 font-black">Aucune demande d'upgrade en attente</td></tr>
+                      ) : upgradeRequests.map((r: any) => (
+                        <tr key={r.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 font-black text-white">{r.tenantName || r.tenant?.name}</td>
+                          <td className="px-6 py-4 text-slate-400">{r.currentPlan}</td>
+                          <td className="px-6 py-4 text-indigo-300 font-black">{r.requestedPlan}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500 max-w-[40ch] truncate">{r.message || '—'}</td>
+                          <td className="px-6 py-4 text-right flex items-center justify-end gap-3">
+                            <button onClick={() => handleApproveUpgrade(r)} className="px-3 py-2 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase hover:bg-emerald-600 flex items-center gap-2"><Check size={14}/>Approuver</button>
+                            <button onClick={() => handleRejectUpgrade(r)} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl font-black text-xs uppercase hover:bg-rose-500 hover:text-white flex items-center gap-2"><Ban size={14}/>Rejeter</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -902,49 +1038,6 @@ const SuperAdmin = () => {
           </div>
         </div>
       )}
-
-          {activeTab === 'UPGRADES' && (
-            <div className="space-y-8 animate-in slide-in-from-bottom-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-6 overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-black uppercase text-white">Traitement des demandes d'upgrade</h3>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-slate-500 uppercase">{upgradeRequests.length} demandes</span>
-                    <button onClick={fetchData} className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-950 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                      <tr>
-                        <th className="px-6 py-3">Instance</th>
-                        <th className="px-6 py-3">Offre courante</th>
-                        <th className="px-6 py-3">Offre demandée</th>
-                        <th className="px-6 py-3">Message</th>
-                        <th className="px-6 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {upgradeRequests.length === 0 ? (
-                        <tr><td colSpan={5} className="py-12 text-center text-slate-500 font-black">Aucune demande d'upgrade en attente</td></tr>
-                      ) : upgradeRequests.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 font-black text-white">{r.tenantName || r.tenant?.name}</td>
-                          <td className="px-6 py-4 text-slate-400">{r.currentPlan}</td>
-                          <td className="px-6 py-4 text-indigo-300 font-black">{r.requestedPlan}</td>
-                          <td className="px-6 py-4 text-sm text-slate-500 max-w-[40ch] truncate">{r.message || '—'}</td>
-                          <td className="px-6 py-4 text-right flex items-center justify-end gap-3">
-                            <button onClick={() => handleApproveUpgrade(r)} className="px-3 py-2 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase hover:bg-emerald-600 flex items-center gap-2"><Check size={14}/>Approuver</button>
-                            <button onClick={() => handleRejectUpgrade(r)} className="px-3 py-2 bg-rose-500/10 text-rose-500 rounded-2xl font-black text-xs uppercase hover:bg-rose-500 hover:text-white flex items-center gap-2"><Ban size={14}/>Rejeter</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
 
       {/* CUSTOM CONFIRMATION MODAL (High Fidelity Replacement) */}
       {confirmAction && (

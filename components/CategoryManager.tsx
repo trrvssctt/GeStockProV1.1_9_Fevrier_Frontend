@@ -35,6 +35,7 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Category | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [showDetailsCategory, setShowDetailsCategory] = useState<Category | null>(null);
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({ name: '', description: '' });
@@ -292,6 +293,13 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
                           </div>
                           {canModify && (
                             <div className="flex gap-2">
+                              <button
+                                onClick={() => setShowDetailsCategory(cat)}
+                                title="Détails"
+                                className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                              >
+                                <Eye size={18} />
+                              </button>
                               <button 
                                 onClick={() => openEdit(cat)} 
                                 title={isLinked ? "Modification verrouillée" : "Modifier"}
@@ -299,6 +307,7 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
                               >
                                 <Edit3 size={18}/>
                               </button>
+                              
                               <button 
                                 onClick={() => !isLinked && setShowDeleteConfirm(cat)} 
                                 title={isLinked ? "Suppression verrouillée" : "Supprimer"}
@@ -356,9 +365,13 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
                         <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                           {canModify && (
                             <>
+                            <button onClick={() => setShowDetailsCategory(cat)} className="px-3 py-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50">
+                                <Eye size={16} />
+                              </button>
                               <button onClick={() => openEdit(cat)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}>
                                 <Edit3 size={16} />
                               </button>
+                              
                               <button onClick={() => !isLinked && setShowDeleteConfirm(cat)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
                                 <Trash2 size={16} />
                               </button>
@@ -464,6 +477,55 @@ const CategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => {
                 >
                   Annuler l'action
                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* DETAILS MODAL */}
+      {showDetailsCategory && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
+              <div className="px-10 py-8 bg-slate-900 text-white flex justify-between items-center">
+                 <div className="flex items-center gap-4">
+                   <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
+                     <Layers size={28} />
+                   </div>
+                   <div>
+                     <h3 className="text-2xl font-black uppercase tracking-tight">{showDetailsCategory.name}</h3>
+                     <p className="text-xs text-indigo-200 uppercase tracking-widest mt-1">ID: {showDetailsCategory.id.slice(0,8)}</p>
+                   </div>
+                 </div>
+                 <button onClick={() => setShowDetailsCategory(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><X size={24} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-8 bg-slate-50 custom-scrollbar">
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                   <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                     <h4 className="text-xs font-black uppercase text-slate-400">Détails</h4>
+                     <p className="text-sm font-black text-slate-800 mt-3">{showDetailsCategory.description || '—'}</p>
+                     <div className="mt-6">
+                       <h5 className="text-[10px] font-black text-slate-400 uppercase">Sous-catégories liées</h5>
+                       <p className="text-2xl font-black text-indigo-700 mt-2">{subcategories.filter(s => (s.categoryId || s.category_id) === showDetailsCategory.id).length}</p>
+                     </div>
+                   </div>
+                   <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                     <h4 className="text-xs font-black uppercase text-slate-400">Liste des sous-catégories</h4>
+                     <div className="mt-4 space-y-3">
+                       {subcategories.filter(s => (s.categoryId || s.category_id) === showDetailsCategory.id).length === 0 ? (
+                         <div className="py-10 text-center text-slate-300">Aucune sous-catégorie liée</div>
+                       ) : (
+                         subcategories.filter(s => (s.categoryId || s.category_id) === showDetailsCategory.id).map(sc => (
+                           <div key={sc.id} className="p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+                             <div>
+                               <p className="font-black text-slate-800">{sc.name}</p>
+                               <p className="text-xs text-slate-400 mt-1">ID: {sc.id.slice(0,8)}</p>
+                             </div>
+                           </div>
+                         ))
+                       )}
+                     </div>
+                   </div>
+                 </div>
               </div>
            </div>
         </div>

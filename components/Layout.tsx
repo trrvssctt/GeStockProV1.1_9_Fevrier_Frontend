@@ -32,6 +32,11 @@ const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [asideTextColor, setAsideTextColor] = useState<string>('#ffffff');
+  const [primaryTextOnPrimary, setPrimaryTextOnPrimary] = useState<string>('#ffffff');
+  const [primaryHex, setPrimaryHex] = useState<string>('#4f46e5');
+  const [buttonHex, setButtonHex] = useState<string>('#4f46e5');
+  const [hoveredMenuId, setHoveredMenuId] = useState<string | null>(null);
 
   const allMenuItems = [
     { id: 'superadmin', label: 'Kernel SuperAdmin', icon: Terminal },
@@ -68,6 +73,76 @@ const Layout: React.FC<LayoutProps> = ({
     }
   }, [user]);
 
+  // Helpers: normalize hex and compute relative luminance for contrast decisions
+  const normalizeHex = (raw?: string) => {
+    if (!raw) return '';
+    let s = raw.trim();
+    if (!s) return '';
+    if (!s.startsWith('#')) s = '#' + s;
+    if (s.length === 4) {
+      const r = s[1];
+      const g = s[2];
+      const b = s[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    return s.substring(0, 7).toLowerCase();
+  };
+
+  const hexToRgb = (hex: string) => {
+    const h = normalizeHex(hex);
+    if (!h) return null;
+    const r = parseInt(h.substr(1,2), 16);
+    const g = parseInt(h.substr(3,2), 16);
+    const b = parseInt(h.substr(5,2), 16);
+    return { r, g, b };
+  };
+
+  const hexToRgba = (hex: string, alpha = 1) => {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return `rgba(0,0,0,${alpha})`;
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+  };
+
+  const relativeLuminance = (r: number, g: number, b: number) => {
+    const srgb = [r, g, b].map(v => v / 255).map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+    return 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  };
+
+  useEffect(() => {
+    const recomputeColors = () => {
+      try {
+        const style = getComputedStyle(document.documentElement);
+        const primaryRaw = style.getPropertyValue('--primary-kernel') || '#4f46e5';
+        const buttonRaw = style.getPropertyValue('--button-kernel') || primaryRaw;
+        const pHex = normalizeHex(primaryRaw) || '#4f46e5';
+        const bHex = normalizeHex(buttonRaw) || pHex;
+        setPrimaryHex(pHex);
+        setButtonHex(bHex);
+        const pRgb = hexToRgb(pHex);
+        const bRgb = hexToRgb(bHex);
+        const pLum = pRgb ? relativeLuminance(pRgb.r, pRgb.g, pRgb.b) : 0;
+        const bLum = bRgb ? relativeLuminance(bRgb.r, bRgb.g, bRgb.b) : 0;
+        const primaryIsLight = pLum > 0.5;
+        const buttonIsLight = bLum > 0.5;
+        setAsideTextColor(buttonIsLight ? '#0f172a' : '#ffffff');
+        setPrimaryTextOnPrimary(primaryIsLight ? '#0f172a' : '#ffffff');
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    // initial compute
+    recomputeColors();
+
+    // listen for explicit theme updates dispatched by Settings
+    const handler = () => recomputeColors();
+    window.addEventListener('tenant-theme-updated', handler as EventListener);
+
+    return () => {
+      window.removeEventListener('tenant-theme-updated', handler as EventListener);
+    };
+  }, []);
+
   const roles = Array.isArray(user.roles) ? user.roles : [user.role];
   const tenantStatus = (user as any)?.tenant?.paymentStatus;
   const isTenantOk = !tenantStatus || tenantStatus === 'UP_TO_DATE' || tenantStatus === 'TRIAL';
@@ -76,7 +151,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className={`flex h-screen ${isSuperAdminMode ? 'bg-slate-950' : 'bg-slate-50'} overflow-hidden transition-colors duration-500`}>
-      <aside className={`w-64 ${isSuperAdminMode ? 'bg-slate-950' : 'bg-slate-900'} text-white flex flex-col shadow-2xl z-20`}>
+      <aside className={`w-64 text-white flex flex-col shadow-2xl z-20`} style={!isSuperAdminMode ? { backgroundColor: 'var(--button-kernel)', color: asideTextColor } : undefined}>
         <div className="p-6 flex items-center gap-3">
           {logoUrl ? (
             <div className="flex items-center gap-3">
@@ -84,8 +159,8 @@ const Layout: React.FC<LayoutProps> = ({
               <span className="text-sm font-black tracking-tighter truncate max-w-[140px] uppercase">{companyName}</span>
             </div>
           ) : (
-            <h1 className={`text-xl font-bold tracking-tight ${isSuperAdminMode ? 'text-rose-500' : ''}`} style={isSuperAdminMode ? undefined : { color: 'var(--primary-kernel)' }}>
-              GESTOCK<span className="text-white">PRO</span>
+            <h1 className={`text-xl font-bold tracking-tight ${isSuperAdminMode ? 'text-rose-500' : ''}`} style={isSuperAdminMode ? undefined : { color: asideTextColor }}>
+              GESTOCK<span style={{ backgroundColor: 'var(--primary-kernel)', color: primaryTextOnPrimary, padding: '0 6px', marginLeft: 6, borderRadius: 6 }}>PRO</span>
             </h1>
           )}
         </div>
@@ -93,17 +168,25 @@ const Layout: React.FC<LayoutProps> = ({
         <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
           {allMenuItems.filter(item => authBridge.canAccess(user, item.id)).map((item) => {
             const isActive = activeTab === item.id;
+            const isHovered = hoveredMenuId === item.id;
+            const defaultTextColor = asideTextColor;
+            const inactiveTextColor = defaultTextColor;
+            const activeBg = 'var(--primary-kernel)';
+            const hoverBg = isHovered ? hexToRgba(buttonHex || primaryHex, 0.12) : 'transparent';
+            const bgStyle = isSuperAdminMode ? undefined : (isActive ? { backgroundColor: activeBg } : { backgroundColor: hoverBg });
+            const itemTextColor = isActive ? '#ffffff' : inactiveTextColor;
+
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                  isActive ? (isSuperAdminMode ? 'text-white bg-rose-500' : 'text-white shadow-lg') : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-                style={!isSuperAdminMode && isActive ? { backgroundColor: 'var(--primary-kernel)' } : undefined}
+                onMouseEnter={() => setHoveredMenuId(item.id)}
+                onMouseLeave={() => setHoveredMenuId(null)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group`}
+                style={!isSuperAdminMode ? { ...bgStyle, color: itemTextColor } : undefined}
               >
-                <item.icon size={20} className={`${isActive ? 'text-white' : 'text-slate-500'}`} />
-                <span className="font-bold text-[10px] uppercase tracking-widest">{item.label}</span>
+                <item.icon size={20} style={{ color: isActive ? '#ffffff' : hexToRgba(itemTextColor, 0.9) }} />
+                <span className="font-bold text-[10px] uppercase tracking-widest" style={{ color: isActive ? '#ffffff' : itemTextColor }}>{item.label}</span>
               </button>
             );
           })}
@@ -121,7 +204,7 @@ const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
           </div>
-          <button onClick={() => setShowLogoutConfirm(true)} className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-black text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 uppercase tracking-widest">
+          <button onClick={() => setShowLogoutConfirm(true)} className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-black text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 uppercase tracking-widest" style={{ backgroundColor: 'transparent' }}>
             <LogOut size={12} /> DÉCONNEXION
           </button>
         </div>

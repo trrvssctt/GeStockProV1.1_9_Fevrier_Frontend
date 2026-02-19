@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   GitMerge, Plus, Search, Edit3, Trash2, X, 
-  Save, AlertCircle, RefreshCw, Layers,
+  Save, AlertCircle, RefreshCw, Layers, Eye, Package,
   ChevronRight, LayoutGrid, Info, FolderTree, ArrowRight, Lock,
   ShieldAlert, CheckCircle2
 } from 'lucide-react';
@@ -40,6 +40,7 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Subcategory | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
   const [selectedSub, setSelectedSub] = useState<Subcategory | null>(null);
+  const [showDetailsSub, setShowDetailsSub] = useState<Subcategory | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({ 
@@ -325,6 +326,13 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
                           </div>
                           {canModify && (
                             <div className="flex gap-1">
+                              <button
+                                onClick={() => setShowDetailsSub(sub)}
+                                title="Détails"
+                                className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                              >
+                                <Eye size={18} />
+                              </button>
                               <button 
                                 onClick={() => openEdit(sub)} 
                                 title={isLinked ? "Modification bloquée" : "Modifier"}
@@ -332,6 +340,7 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
                               >
                                 <Edit3 size={18}/>
                               </button>
+                              
                               <button 
                                 onClick={() => !isLinked && setShowDeleteConfirm(sub)} 
                                 title={isLinked ? "Suppression bloquée" : "Supprimer"}
@@ -390,9 +399,13 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
                         <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                           {canModify && (
                             <>
+                             <button onClick={() => setShowDetailsSub(sub)} className="px-3 py-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50">
+                                <Eye size={16} />
+                              </button>
                               <button onClick={() => openEdit(sub)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}>
                                 <Edit3 size={16} />
                               </button>
+                             
                               <button onClick={() => !isLinked && setShowDeleteConfirm(sub)} className={`px-3 py-2 rounded-xl ${isLinked ? 'bg-slate-50 text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
                                 <Trash2 size={16} />
                               </button>
@@ -507,6 +520,61 @@ const SubcategoryManager: React.FC<{ plan?: SubscriptionPlan }> = ({ plan }) => 
                 >
                   Annuler l'action
                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* DETAILS MODAL */}
+      {showDetailsSub && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white w-full max-w-5xl rounded-[4rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-500">
+              <div className="px-12 py-10 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                 <div className="flex items-center gap-6">
+                    <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-3xl shadow-2xl shadow-indigo-500/20 overflow-hidden">
+                      <Package size={40} />
+                    </div>
+                    <div>
+                       <h3 className="text-3xl font-black uppercase tracking-tighter leading-none">{showDetailsSub.name}</h3>
+                       <div className="flex items-center gap-4 mt-3">
+                         <span className="text-xs text-indigo-200 uppercase tracking-widest">ID: {showDetailsSub.id.slice(0,8)}</span>
+                       </div>
+                    </div>
+                 </div>
+                 <button onClick={() => setShowDetailsSub(null)} className="p-4 bg-white/5 hover:bg-white/10 rounded-3xl transition-all"><X size={32}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-12 grid grid-cols-12 gap-10 bg-slate-50/30 custom-scrollbar">
+                 <div className="col-span-12 lg:col-span-4 space-y-8">
+                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm space-y-6">
+                       <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Description</h4>
+                       <p className="text-sm font-black text-slate-800">{showDetailsSub.description || '—'}</p>
+                       <div>
+                         <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produits liés</h5>
+                         <p className="text-2xl font-black text-indigo-700 mt-2">{stocks.filter(s => (s.subcategoryId || s.subcategory_id) === showDetailsSub.id).length}</p>
+                       </div>
+                    </div>
+                 </div>
+                 <div className="col-span-12 lg:col-span-8 bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col min-h-[300px]">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">Liste des produits</h4>
+                    <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                      {stocks.filter(s => (s.subcategoryId || s.subcategory_id) === showDetailsSub.id).length === 0 ? (
+                        <div className="py-10 text-center text-slate-300">Aucun produit lié</div>
+                      ) : (
+                        stocks.filter(s => (s.subcategoryId || s.subcategory_id) === showDetailsSub.id).map(prod => (
+                          <div key={prod.id} className="p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+                            <div>
+                              <p className="font-black text-slate-800">{prod.name}</p>
+                              <p className="text-xs text-slate-400 mt-1">SKU: {prod.sku || '—'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-black">{prod.currentLevel ?? prod.quantity ?? 0}</p>
+                              <p className="text-xs text-slate-400">{prod.unitPrice ? `${prod.unitPrice} €` : '—'}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                 </div>
               </div>
            </div>
         </div>

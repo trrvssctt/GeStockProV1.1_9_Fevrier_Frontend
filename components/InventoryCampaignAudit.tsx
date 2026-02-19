@@ -3,7 +3,7 @@ import {
   ArrowLeft, CheckCircle2, Loader2, Printer, Download,
   Search, Package, RefreshCw, FileText, Plus,
   AlertTriangle, ArrowRight, ShieldCheck, History,
-  X, Info, Database, Zap
+  X, Info, Database, Zap, Trash2
 } from 'lucide-react';
 import { apiClient } from '../services/api';
 import InventoryAuditReport from './InventoryAuditReport';
@@ -28,6 +28,9 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, string>>({});
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const saveIntervalRef = useRef<number | null>(null);
+  const [isActing, setIsActing] = useState(false);
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const showToast = useToast();
 
   const fetchItems = async () => {
@@ -242,19 +245,140 @@ const InventoryCampaignAudit: React.FC<Props> = ({ campaign, settings, onBack, o
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            if (!allCounted) {
-              alert('Veuillez saisir toutes les quantités avant de clôturer l\'audit.');
-              return;
-            }
-            setShowValidationModal(true);
-          }}
-          disabled={!allCounted}
-          className={`px-10 py-5 rounded-[1.5rem] font-black transition-all shadow-xl flex items-center gap-3 text-xs uppercase tracking-widest active:scale-95 ${allCounted ? 'bg-indigo-600 text-white hover:bg-slate-900' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-        >
-          <CheckCircle2 size={18} /> CLÔTURER L'AUDIT
-        </button>
+        <div className="flex items-center gap-3">
+          {campaign.status === 'DRAFT' && (
+            <>
+              <button
+                onClick={() => setShowSuspendModal(true)}
+                className="px-6 py-3 bg-white border border-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50"
+              >
+                {isActing ? <Loader2 className="animate-spin"/> : <RefreshCw size={16} />} SUSPENDRE
+              </button>
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="px-6 py-3 bg-white border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600 hover:text-white"
+              >
+                {isActing ? <Loader2 className="animate-spin"/> : <Trash2 size={16} />} ANNULER
+              </button>
+            </>
+          )}
+
+          {campaign.status === 'SUSPENDED' && (
+            <>
+              <button
+                onClick={async () => {
+                  setIsActing(true);
+                  try {
+                    await apiClient.post(`/stock/campaigns/${campaign.id}/resume`);
+                    showToast('Campagne relancée.', 'success');
+                    campaign.status = 'DRAFT';
+                    fetchItems();
+                  } catch (err: any) {
+                    showToast(err?.message || 'Impossible de relancer la campagne.', 'error');
+                  } finally { setIsActing(false); }
+                }}
+                className="px-6 py-3 bg-white border border-indigo-100 text-indigo-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white"
+              >
+                {isActing ? <Loader2 className="animate-spin"/> : <ArrowRight size={16} />} RELANCER
+              </button>
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="px-6 py-3 bg-white border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600 hover:text-white"
+              >
+                {isActing ? <Loader2 className="animate-spin"/> : <Trash2 size={16} />} ANNULER
+              </button>
+            </>
+          )}
+
+          {/* Suspend/Cancel modals */}
+          {showSuspendModal && (
+            <div className="fixed inset-0 z-[1150] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
+              <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+                <div className="px-8 py-6 bg-amber-50 border-b border-amber-100 flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><RefreshCw size={24} /></div>
+                  <div>
+                    <h3 className="text-lg font-black uppercase">Suspendre la campagne</h3>
+                    <p className="text-sm text-slate-500 mt-1">Mettez la campagne en pause pour reprendre la saisie ultérieurement.</p>
+                  </div>
+                </div>
+                <div className="p-8 space-y-6">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <p className="text-[12px] font-bold text-slate-700">Confirmez la suspension de :</p>
+                    <p className="mt-2 text-sm font-black text-slate-900 uppercase tracking-tight">{campaign.name}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-mono">ID: {campaign.id?.slice(0,8)}</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button onClick={() => setShowSuspendModal(false)} className="flex-1 py-4 rounded-2xl border border-slate-200 text-slate-500 font-black uppercase text-xs">Annuler</button>
+                    <button onClick={async () => {
+                      setIsActing(true);
+                      try {
+                        await apiClient.post(`/stock/campaigns/${campaign.id}/suspend`);
+                        showToast('Campagne suspendue.', 'success');
+                        setShowSuspendModal(false);
+                        onBack();
+                      } catch (err: any) {
+                        showToast(err?.message || 'Impossible de suspendre la campagne.', 'error');
+                      } finally { setIsActing(false); }
+                    }} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-amber-600 text-white hover:bg-amber-700`}>{isActing ? <Loader2 className="animate-spin"/> : 'Suspendre la campagne'}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCancelModal && (
+            <div className="fixed inset-0 z-[1150] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md">
+              <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+                <div className="px-8 py-6 bg-rose-50 border-b border-rose-100 flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600"><Trash2 size={24} /></div>
+                  <div>
+                    <h3 className="text-lg font-black uppercase">Annuler la campagne</h3>
+                    <p className="text-sm text-slate-500 mt-1">Cette action est irréversible et supprimera l'état actif de la campagne.</p>
+                  </div>
+                </div>
+                <div className="p-8 space-y-6">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <p className="text-[12px] font-bold text-slate-700">Confirmez l'annulation de :</p>
+                    <p className="mt-2 text-sm font-black text-slate-900 uppercase tracking-tight">{campaign.name}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-mono">ID: {campaign.id?.slice(0,8)}</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button onClick={() => setShowCancelModal(false)} className="flex-1 py-4 rounded-2xl border border-slate-200 text-slate-500 font-black uppercase text-xs">Retour</button>
+                    <button onClick={async () => {
+                      setIsActing(true);
+                      try {
+                        await apiClient.post(`/stock/campaigns/${campaign.id}/cancel`);
+                        showToast('Campagne annulée.', 'success');
+                        setShowCancelModal(false);
+                        onBack();
+                      } catch (err: any) {
+                        showToast(err?.message || 'Impossible d\'annuler la campagne.', 'error');
+                      } finally { setIsActing(false); }
+                    }} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-rose-600 text-white hover:bg-rose-700`}>{isActing ? <Loader2 className="animate-spin"/> : 'Annuler définitivement'}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {campaign.status === 'CANCELLED' && (
+            <div className="px-6 py-3 text-rose-600 font-black uppercase text-xs">Campagne annulée — aucune action possible</div>
+          )}
+
+          <button
+            onClick={() => {
+              if (!allCounted) {
+                alert('Veuillez saisir toutes les quantités avant de clôturer l\'audit.');
+                return;
+              }
+              setShowValidationModal(true);
+            }}
+              disabled={!allCounted || campaign.status !== 'DRAFT'}
+              className={`px-10 py-5 rounded-[1.5rem] font-black transition-all shadow-xl flex items-center gap-3 text-xs uppercase tracking-widest active:scale-95 ${allCounted && campaign.status === 'DRAFT' ? 'bg-indigo-600 text-white hover:bg-slate-900' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+          >
+            <CheckCircle2 size={18} /> CLÔTURER L'AUDIT
+          </button>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
