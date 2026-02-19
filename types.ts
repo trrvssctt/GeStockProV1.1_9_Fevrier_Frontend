@@ -52,6 +52,12 @@ export interface Tenant {
   lastPaymentDate: string;
   paymentStatus: 'UP_TO_DATE' | 'LATE' | 'FAILED' | 'TRIAL' | 'PENDING';
   createdAt?: string; 
+  // UI preferences
+  primaryColor?: string;
+  buttonColor?: string;
+  fontFamily?: string;
+  baseFontSize?: number;
+  theme?: 'light' | 'dark' | string;
 }
 
 export interface User {

@@ -23,7 +23,7 @@ const PLAN_RULES = {
     ],
     limits: {
       customers: 5,
-      users: 3,
+      users: 6,
       monthlySales: 20
     }
   },
@@ -40,7 +40,7 @@ const PLAN_RULES = {
       'governance',
       'subscription',
       'settings',
-      'audit',
+      //'audit',
       'security',
       'recovery',
       'movements'
@@ -64,7 +64,7 @@ const PLAN_RULES = {
       'governance',
       'subscription',
       'settings',
-      'audit',
+      //'audit',
       'security',
       'recovery',
       'movements',
@@ -91,6 +91,33 @@ export const authBridge = {
       AUTH_STORAGE_KEY,
       JSON.stringify({ user: sessionUser, token, timestamp: Date.now() })
     );
+    // Apply tenant UI preferences immediately so login shows correct look
+    try {
+      const tenant = (sessionUser as any).tenant || (sessionUser as any).tenantData || null;
+      // tenant may include theme, fontFamily, baseFontSize, primaryColor
+      if (tenant) {
+        if (tenant.primaryColor) {
+          document.documentElement.style.setProperty('--primary-kernel', tenant.primaryColor);
+        }
+        if (tenant.buttonColor || tenant.button_color) {
+          document.documentElement.style.setProperty('--button-kernel', tenant.buttonColor || tenant.button_color);
+        }
+        if (tenant.fontFamily) {
+          document.documentElement.style.setProperty('--kernel-font-family', tenant.fontFamily);
+          document.documentElement.style.fontFamily = tenant.fontFamily;
+        }
+        if (tenant.baseFontSize) {
+          document.documentElement.style.setProperty('--base-font-size', `${tenant.baseFontSize}px`);
+          document.documentElement.style.fontSize = `${tenant.baseFontSize}px`;
+        }
+        const themeVal = tenant.theme ?? tenant.is_dark ?? 'light';
+        const isDark = themeVal === 'dark' || themeVal === true;
+        document.documentElement.classList.toggle('dark', Boolean(isDark));
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      }
+    } catch (e) {
+      // no-op
+    }
   },
 
   getSession: (): { user: User; token: string } | null => {
@@ -134,6 +161,17 @@ export const authBridge = {
   canAccess: (user: User, moduleId: string): boolean => {
     const roles = Array.isArray(user.roles) ? user.roles : [user.role];
     const planId = (user as any).planId || 'BASIC';
+    // Tenant payment gating: if tenant is not up-to-date, restrict access.
+    const tenantStatus = (user as any)?.tenant?.paymentStatus;
+    const isTenantOk = !tenantStatus || tenantStatus === 'UP_TO_DATE' || tenantStatus === 'TRIAL';
+    if (!isTenantOk) {
+      // SUPER_ADMIN allowed only to access superadmin panel
+      if (roles.includes(UserRole.SUPER_ADMIN)) return moduleId === 'superadmin';
+      // ADMIN can only access dashboard when tenant payments are not up-to-date
+      if (roles.includes(UserRole.ADMIN)) return moduleId === 'dashboard';
+      // All other roles: no access
+      return false;
+    }
 
     // SUPER ADMIN : accès réservé uniquement au panneau 'superadmin'
     // (retourne true seulement si le module demandé est 'superadmin')
@@ -151,7 +189,7 @@ export const authBridge = {
     if (roles.includes(UserRole.ADMIN)) return true;
 
     const roleMap: Record<string, string[]> = {
-      [UserRole.SALES]: ['dashboard', 'sales', 'customers'],
+      [UserRole.SALES]: ['dashboard', 'sales'],
       [UserRole.SUPER_ADMIN]: ['superadmin'],
       [UserRole.STOCK_MANAGER]: [
         'dashboard',
@@ -163,10 +201,8 @@ export const authBridge = {
       ],
       [UserRole.ACCOUNTANT]: [
         'dashboard',
-        'sales',
         'payments',
         'customers',
-        'services',
         'recovery'
       ],
       ['EMPLOYEE' as any]: ['dashboard', 'inventory', 'customers', 'services']
@@ -186,10 +222,10 @@ export const authBridge = {
     const roles = Array.isArray(user.roles) ? user.roles : [user.role];
     const planId = (user as any).planId || 'BASIC';
 
-    // SUPER ADMIN / ADMIN : pas de restriction
-    /*if (roles.includes(UserRole.SUPER_ADMIN) || roles.includes(UserRole.ADMIN)) {
+    // SUPER ADMIN / ADMIN : pas de restriction — autoriser CRUD complet
+    if (roles.includes(UserRole.SUPER_ADMIN) || roles.includes(UserRole.ADMIN)) {
       return true;
-    }*/
+    }
 
     const plan = PLAN_RULES[planId as keyof typeof PLAN_RULES] || PLAN_RULES.BASIC;
 

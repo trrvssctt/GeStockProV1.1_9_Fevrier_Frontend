@@ -122,6 +122,29 @@ const App: React.FC = () => {
           companyName: settings.name || 'Ma Société',
           ...settings 
         });
+        // Apply visual preferences globally so entire app reflects tenant settings
+        try {
+          if (settings.primaryColor) {
+            document.documentElement.style.setProperty('--primary-kernel', settings.primaryColor);
+          }
+          if (settings.buttonColor || settings.button_color) {
+            document.documentElement.style.setProperty('--button-kernel', settings.buttonColor || settings.button_color);
+          }
+          if (settings.fontFamily) {
+            document.documentElement.style.setProperty('--kernel-font-family', settings.fontFamily);
+            document.documentElement.style.fontFamily = settings.fontFamily;
+          }
+          if (settings.baseFontSize) {
+            document.documentElement.style.setProperty('--base-font-size', `${settings.baseFontSize}px`);
+            document.documentElement.style.fontSize = `${settings.baseFontSize}px`;
+          }
+          const themeVal = settings.theme ?? settings.is_dark ?? 'light';
+          const isDark = themeVal === 'dark' || themeVal === true;
+          document.documentElement.classList.toggle('dark', Boolean(isDark));
+          document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        } catch (e) {
+          // ignore apply errors
+        }
       }
     } catch (e) {
       console.warn("Settings Sync failed");
