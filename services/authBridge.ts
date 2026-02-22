@@ -136,6 +136,7 @@ export const authBridge = {
     }
   },
 
+
   fetchMe: async (token: string): Promise<User | null> => {
     try {
       //const response = await fetch('http://localhost:3000/api/auth/me', {

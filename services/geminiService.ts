@@ -2,7 +2,6 @@
 /**
  * Agent IA Orchestrator - Bridge n8n & Moteur de Données MySQL/PostgreSQL
  */
-import { GoogleGenAI } from "@google/genai";
 import { apiClient } from "./api";
 
 const PROD_WEBHOOK = 'https://malvasian-pleonic-fatimah.ngrok-free.dev/webhook/chat-ia';
@@ -50,27 +49,31 @@ export const extractDataFromText = (text: string): any[] => {
 
 export const getAIResponse = async (message: string, tenantId: string): Promise<AIChatResponse> => {
   try {
-    const res = await fetch(PROD_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-      body: JSON.stringify({ chatInput: message, sessionId: tenantId })
-    });
-    const rawData = await res.json();
+    // Call backend proxy to avoid CORS and let server-side handle external webhook
+    // Send both shapes so target webhook (n8n) can read either `chatInput/sessionId` or `message/id`.
+    const rawData = await apiClient.post('/ai/bridge', { chatInput: message, sessionId: tenantId, message, id: tenantId });
     return processResponse(rawData);
   } catch (e) {
-    return await callNativeKernel(message);
+    // Forward the error up for the UI to show a friendly message
+    throw e;
   }
 };
 
 const processResponse = (rawData: any): AIChatResponse => {
-  const data = Array.isArray(rawData) ? rawData[0] : rawData;
-  const rawText = data.formattedResponse || data.output || data.text || "";
+  // The bridge may return several shapes:
+  // - direct object or array from n8n: { formattedResponse, format, rawResults }
+  // - wrapper from bridge when using fallback: { fromFallback: true, fallbackUrl, data: <n8n payload> }
+  // Normalize to a single object (prefer first element when array)
+  let data = rawData;
+  if (data && typeof data === 'object' && data.data) data = data.data;
+  if (Array.isArray(data)) data = data[0] || {};
+  const rawText = (data && (data.formattedResponse || data.output || data.text)) || "";
   
-  let format = data.format || 'general';
-  let results = data.rawResults || data.data || [];
+  let format = (data && data.format) || 'general';
+  let results = (data && (data.rawResults || data.data || data.results)) || [];
   
   // Gestion spécifique du format Excel / Téléchargement
-  let downloadUrl = data.downloadUrl || null;
+  let downloadUrl = (data && (data.downloadUrl || null)) || null;
   if (format === 'excel') {
     // Simuler ou récupérer un lien d'export n8n/ERP
     downloadUrl = data.downloadUrl || `http://localhost:3000/api/documents/export/${data.sessionId || 'current'}`;
@@ -84,7 +87,7 @@ const processResponse = (rawData: any): AIChatResponse => {
   }
 
   return {
-    formattedResponse: cleanProfessionalText(rawText) || "Analyse terminée.",
+    formattedResponse: cleanProfessionalText(rawText) || "Nous rencontrons des difficultés à interpréter la réponse. Veuillez reformuler votre question ou contacter le support.",
     format: format as any,
     resultCount: results.length,
     rawResults: results,
@@ -94,28 +97,7 @@ const processResponse = (rawData: any): AIChatResponse => {
   };
 };
 
-const callNativeKernel = async (message: string): Promise<AIChatResponse> => {
-  try {
-    // Fixed: Obtained API key exclusively from environment variable process.env.API_KEY and used it directly.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: message,
-      config: {
-        systemInstruction: "Tu es l'assistant IA de GeStockPro. Réponds de manière concise et professionnelle.",
-      },
-    });
-    return {
-      formattedResponse: response.text || "",
-      format: 'general',
-      resultCount: 0,
-      status: 'SUCCESS',
-      mode: 'NATIVE'
-    };
-  } catch {
-    return { formattedResponse: "Échec critique Kernel.", format: 'general', resultCount: 0, status: 'ERROR' };
-  }
-};
+// Native kernel fallback removed: n8n is the source of truth for webhook responses.
 
 export const fetchChatHistory = async (): Promise<any[]> => apiClient.get('/ai/history');
 export const fetchPromptTemplates = async (): Promise<any[]> => apiClient.get('/ai/templates');

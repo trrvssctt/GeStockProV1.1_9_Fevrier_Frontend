@@ -1,10 +1,24 @@
 
 import { authBridge } from './authBridge';
 
-// Use Vite env var when available; fallback to localhost
+// Use Vite env var when available; fallback to runtime detection or localhost
 // Ensure the base URL ends with `/api` so frontend requests target the API routes.
-//const rawBackend = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3000';
-const rawBackend = (import.meta as any).env?.VITE_BACKEND_URL || 'https://gestockprov1-1-9-fevrier.onrender.com';
+const buildTimeBackend = (import.meta as any).env?.VITE_BACKEND_URL;
+let rawBackend = buildTimeBackend || '';
+if (!rawBackend) {
+  try {
+    const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+    // If served from a real host (not localhost) assume API is co-located under the same origin
+    if (origin && !/localhost|127\.0\.0\.1/.test(origin)) {
+      rawBackend = origin;
+    } else {
+      rawBackend = 'https://gestockprov1-1-9-fevrier.onrender.com';
+    }
+  } catch (e) {
+    rawBackend = 'https://gestockprov1-1-9-fevrier.onrender.com';
+  }
+}
+//const rawBackend = (import.meta as any).env?.VITE_BACKEND_URL || 'https://gestockprov1-1-9-fevrier.onrender.com';
 const BACKEND_URL = rawBackend.endsWith('/api') ? rawBackend : `${rawBackend.replace(/\/+$/, '')}/api`;
 
 export interface ApiError {

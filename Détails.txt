@@ -1,133 +1,16 @@
-Détails des modules - Présentation marketing
+### **📊 Tables principales (schéma public) :**
+1. `sales` - Ventes : id, tenant_id, customer_id, sale_date, total_ttc, status
+2. `customers` - Clients : id, tenant_id, company_name, email, main_contact
+3. `stock_items` - Produits : id, tenant_id, name, sku, current_level, unit_price
+4. `sale_items` - Lignes de vente : id, sale_id, stock_item_id, quantity, unit_price
+5. `invoices` - Factures : id, tenant_id, customer_id, invoice_date, amount, status
+6. `categories/subcategories` - Classification produits
+7. `product_movements` - Mouvements de stock
+8. `services` - id 	tenant_id 	name 	description 	price 	is_active 	created_at 	updated_at 	status 	deleted_at 	image_url
+9. `users` - id 	tenant_id 	name 	email 	password  	mfa_enabled 	last_login 	active_session 	is_active 	created_at 	updated_at 	roles
 
-Ce document présente, module par module, les fonctionnalités principales et les bénéfices clients de la solution GeStockPro. Les descriptions sont rédigées en français, claires et convaincantes pour aider à vendre l'abonnement.
-
----
-
-# file: CategoryManager.tsx
-Ce module permet de créer, organiser et gérer les catégories de produits. Il offre une interface visuelle pour ajouter des segments métiers, éditer leurs libellés et descriptions, filtrer et parcourir rapidement l'arborescence des catégories.
-
-Pourquoi c'est utile : facilite la structuration logique du catalogue, rend la navigation et la recherche de produits intuitive pour les équipes commerciales et logistiques. Idéal pour les entreprises qui souhaitent maintenir un catalogue propre, évolutif et partageable entre utilisateurs.
-
-Bénéfices clients : gain de temps dans l'organisation, meilleure découverte produit, cohérence des données qui réduit les erreurs de gestion de stock.
-
----
-
-# file: SubcategoryManager.tsx
-Complément naturel du module catégories, il permet de gérer les sous-catégories (segments fins) : création, modification, suppression et contrôle des liens avec les produits.
-
-Pourquoi c'est utile : autorise une granularité d’organisation sans complexifier l’interface principale. Les sous-catégories facilitent les rapports, promotions ciblées et analyses par segment.
-
-Bénéfices clients : segmentation avancée du catalogue, ciblage marketing précis, meilleure adaptation des assortiments selon les besoins.
-
----
-
-# file: Inventory.tsx
-Le cœur du système d’inventaire : gestion complète des articles (création, édition, visualisation), suivi des quantités, seuils, emplacements et images produit.
-
-Pourquoi c'est utile : centralise toutes les informations produit et les niveaux de stock en temps réel, permettant aux équipes d’éviter les ruptures et d’anticiper les approvisionnements.
-
-Bénéfices clients : réduction des pertes, optimisation des réapprovisionnements, visibilité instantanée du stock pour le commerce et la logistique.
-
----
-
-# file: Services.tsx
-Module dédié aux prestations et services. Il permet de créer, éditer et publier des services (prix, description, image) et de suivre leur utilisation dans les ventes.
-
-Pourquoi c'est utile : sépare clairement les biens des services dans la gestion commerciale, simplifie la facturation et le suivi des revenus de service.
-
-Bénéfices clients : monétisation claire des prestations, gestion simplifiée des offres de service, meilleur suivi financier.
-
----
-
-# file: StockMovements.tsx
-Suivi des mouvements de stock (entrées / sorties) avec filtres, export et synthèses. Visualisez qui a déplacé quoi, quand et pourquoi, et exportez des rapports pour l’audit.
-
-Pourquoi c'est utile : offre une traçabilité totale des flux physiques, indispensable pour les audits, la conformité et l’analyse des pertes.
-
-Bénéfices clients : maîtrise des flux, réduction des erreurs opérationnelles, preuve d’audit prête à l’emploi.
-
----
-
-# file: InventoryCampaign.tsx
-Outil d’audit d’inventaire (campagnes) : lancer un inventaire, rassembler les comptes, comparer avec le stock théorique et générer des rapports de divergence.
-
-Pourquoi c'est utile : transforme une tâche lourde en un processus guidé, évite les doublons et garantit la cohérence entre inventaire physique et données systèmes.
-
-Bénéfices clients : clôtures rapides et fiables, gains de productivité lors des inventaires périodiques, meilleur contrôle financier.
-
----
-
-# file: Customers.tsx
-Gestion complète des clients : création de fiches, historique d’achats, segmentation (clients à risque, VIP), filtrage et outils de contact.
-
-Pourquoi c'est utile : centralise les données clients pour un suivi commercial proactif, simplifie les relances et améliore la relation client.
-
-Bénéfices clients : augmentation de la fidélité, meilleure relance des impayés, personnalisation des offres et campagnes.
-
----
-
-# file: Sales.tsx
-Module de ventes tout-en-un : création de ventes, panier, gestion des paiements, livraisons partielles, éditions de documents (factures, reçus) et tableaux de bord commerciaux.
-
-Pourquoi c'est utile : automatise le parcours de vente du devis à la facturation, réduit les erreurs manuelles et accélère le cycle de paiement.
-
-Bénéfices clients : processus de vente fluide, encaissements plus rapides, suivi clair des performances commerciales.
-
----
-
-# file: Recovery.tsx
-Gestion du recouvrement : identification des clients débiteurs, consolidation des soldes, outils d’envoi de rappels par WhatsApp ou email, et opérations groupées de relance.
-
-Pourquoi c'est utile : met en place un workflow pragmatique pour limiter les impayés et améliorer la trésorerie sans surcharge administrative.
-
-Bénéfices clients : réduction du DSO (délai moyen de paiement), meilleure trésorerie, communication automatisée et personnalisée avec les clients.
-
----
-
-# file: Payments.tsx
-Tableau de bord des paiements et trésorerie : suivi des transactions, filtres avancés, statistiques (cash vs digital), export d’images et Excel, previews de factures.
-
-Pourquoi c'est utile : centralise toutes les opérations financières, facilite la réconciliation et fournit des exports prêts pour la comptabilité.
-
-Bénéfices clients : visibilité financière en un clic, reporting simple pour les réunions de direction, export facile pour les comptables.
-
----
-
-# file: Governance.tsx
-Administration des utilisateurs et des rôles : création et modification des comptes, attribution de rôles (admin, stock manager, comptable, commercial), activation / désactivation et règles de sécurité.
-
-Pourquoi c'est utile : contrôle fin des accès et responsabilités, protège les données sensibles tout en permettant une collaboration sécurisée.
-
-Bénéfices clients : conformité aux bonnes pratiques de sécurité, séparation claire des tâches, auditabilité des actions administratives.
-
----
-
-# file: Subscription.tsx
-Gestion des abonnements et plans : présentation des offres, montée en gamme, gestion des paiements d’abonnement et visualisation de l’historique.
-
-Pourquoi c'est utile : permet de monétiser la solution de manière flexible et d’offrir des paliers fonctionnels adaptés aux besoins des clients.
-
-Bénéfices clients : choisir le plan adapté, évoluer sans friction, suivi transparent des paiements et historiques.
-
----
-
-# file: Settings.tsx
-Paramètres de l’application et personnalisation : configuration de l’identité visuelle (logos, couleurs), paramètres fiscaux et préférences globales de la plateforme.
-
-Pourquoi c'est utile : aligne l’outil sur l’image de marque du client, personnalise l’expérience utilisateur et garantit des documents commerciaux conformes aux exigences locales.
-
-Bénéfices clients : image professionnelle, cohérence multi-canale, simplicité d’administration pour le responsable IT ou le manager.
-
----
-
-Conclusion commerciale
-GeStockPro regroupe l’ensemble des fonctions critiques pour la gestion d’un commerce ou d’un entrepôt : catalogue structuré, inventaire rigoureux, ventes et paiements, recouvrement et gouvernance. Chaque module est pensé pour réduire la charge administrative, améliorer la précision opérationnelle et accélérer la trésorerie.
-
-Pourquoi souscrire ?
-- Solution tout-en-un, prête à l’emploi
-- Interfaces claires pour tous les rôles (compta, stock, vente)
-- Export et traçabilité pour audits et comptabilité
-- Évolution par abonnement selon la taille et les besoins
-
-Appelez à l’action : Proposez une démo, testez un essai gratuit et voyez immédiatement votre temps administratif fondre pendant que vos marges et votre satisfaction client montent.
+### **🔗 Relations clés :**
+- `sales.customer_id` → `customers.id`
+- `sale_items.sale_id` → `sales.id`
+- `sale_items.stock_item_id` → `stock_items.id`
+- `invoices.customer_id` → `customers.id`
