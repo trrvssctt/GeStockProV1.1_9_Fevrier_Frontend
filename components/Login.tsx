@@ -108,7 +108,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         plan: apiUser?.plan || null,
         subscription: apiUser?.subscription || null,
         isPaid: Boolean(apiUser?.isPaid),
-        isSubscriptionPastDue: Boolean(apiUser?.isSubscriptionPastDue)
+        isSubscriptionPastDue: Boolean(apiUser?.isSubscriptionPastDue),
+        lastLogin: apiUser?.lastLogin || apiUser?.last_login || null
       };
 
       authBridge.saveSession(user, data.token);
@@ -162,7 +163,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         plan: apiUser?.plan || null,
         subscription: apiUser?.subscription || null,
         isPaid: Boolean(apiUser?.isPaid),
-        isSubscriptionPastDue: Boolean(apiUser?.isSubscriptionPastDue)
+        isSubscriptionPastDue: Boolean(apiUser?.isSubscriptionPastDue),
+        lastLogin: apiUser?.lastLogin || apiUser?.last_login || null
       };
 
       authBridge.saveSession(user, data.token);
