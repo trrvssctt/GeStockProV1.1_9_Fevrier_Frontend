@@ -14,9 +14,13 @@ import { apiClient, ApiError } from '../services/api';
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
+  onBackToLanding: () => void;
+  initialMode?: 'LOGIN' | 'REGISTER' | 'SUPERADMIN' | 'MFA';
+  initialPlanId?: string;
+  initialRegStep?: number;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBackToLanding, initialMode, initialPlanId, initialRegStep }) => {
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'SUPERADMIN' | 'MFA'>('LOGIN');
   const [regStep, setRegStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -37,13 +41,24 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   });
 
   useEffect(() => {
+    // Apply initial navigation options (e.g., open register with preselected plan)
+    if (initialMode) {
+      setMode(initialMode);
+    }
+    if (typeof initialRegStep === 'number') {
+      setRegStep(initialRegStep);
+    }
+    if (initialPlanId) {
+      setRegData(prev => ({ ...prev, planId: initialPlanId }));
+    }
+
     const fetchPlans = async () => {
       try {
         const data = await apiClient.get('/plans');
         setDynamicPlans(data);
         if (data.length > 0) {
           const proPlan = data.find((p: any) => p.id === 'PRO' || p.isPopular);
-          setRegData(prev => ({ ...prev, planId: proPlan?.id || data[0].id }));
+          setRegData(prev => ({ ...prev, planId: prev.planId || proPlan?.id || data[0].id }));
         }
       } catch (err) {
         console.error("Kernel Plans Error", err);
@@ -280,6 +295,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden font-sans text-slate-900">
+      <button type="button" onClick={onBackToLanding} className="absolute left-6 top-6 z-40 text-sm font-black text-white uppercase tracking-widest flex items-center gap-2 hover:text-indigo-300">
+        <ChevronLeft size={16} /> Accueil
+      </button>
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-600/10 rounded-full blur-[120px]"></div>
       
       <div className={`w-full transition-all duration-700 ${mode === 'REGISTER' ? 'max-w-5xl' : 'max-w-md'}`}>
