@@ -374,7 +374,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   </li>
                 ))}
               </ul>
-              <button onClick={() => onLogin({ openRegister: true, planId: 'ENTERPRISE', regStep: 1 })} className="w-full py-4 bg-slate-50 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">Nous contacter</button>
+              <button onClick={() => onLogin({ openRegister: true, planId: 'ENTERPRISE', regStep: 1 })} className="w-full py-4 bg-slate-50 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">Commencer</button>
             </div>
           </div>
         </div>
