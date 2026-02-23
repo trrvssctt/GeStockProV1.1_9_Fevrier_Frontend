@@ -2,6 +2,7 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import Layout from './components/Layout';
 import ToastProvider from './components/ToastProvider';
+import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import InventoryCampaign from './components/InventoryCampaign';
@@ -87,6 +88,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [showLanding, setShowLanding] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [navigationMetadata, setNavigationMetadata] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -96,6 +98,7 @@ const App: React.FC = () => {
   const [showCheckout, setShowCheckout] = useState<{ planId: string, user: User, planObj?: SubscriptionPlan } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<{ companyName: string, user: User, mustPay: boolean, planId: string, planObj?: SubscriptionPlan } | null>(null);
   const [activationPending, setActivationPending] = useState(false);
+  const [initialLoginOptions, setInitialLoginOptions] = useState<{ mode?: string; planId?: string; regStep?: number } | null>(null);
 
   const [appSettings, setAppSettings] = useState<AppSettings>({
     language: 'Français',
@@ -208,6 +211,8 @@ const App: React.FC = () => {
     setShowOnboarding(null);
     setActivationPending(false);
     setNavigationMetadata(null);
+    setShowLanding(true);
+    setInitialLoginOptions(null);
   };
 
   const handleLogout = () => {
@@ -304,7 +309,17 @@ const App: React.FC = () => {
     if (typeof window !== 'undefined' && window.location.pathname === '/superadmin') {
       return <SuperAdminLogin onLoginSuccess={handleLoginSuccess} />;
     }
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    if (showLanding) {
+      return <LandingPage onLogin={(opts) => {
+        setShowLanding(false);
+        if (opts && opts.openRegister) {
+          setInitialLoginOptions({ mode: 'REGISTER', planId: opts.planId, regStep: opts.regStep || 1 });
+        } else {
+          setInitialLoginOptions(null);
+        }
+      }} />;
+    }
+    return <Login onLoginSuccess={handleLoginSuccess} onBackToLanding={() => { setShowLanding(true); setInitialLoginOptions(null); }} initialMode={initialLoginOptions?.mode} initialPlanId={initialLoginOptions?.planId} initialRegStep={initialLoginOptions?.regStep} />;
   }
 
   const renderContent = () => {
