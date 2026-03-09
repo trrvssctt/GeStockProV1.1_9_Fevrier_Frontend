@@ -173,7 +173,8 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
           amount: selectedPlan.price,
           method: operator || paymentMethod || 'WAVE',
           paymentDate: now.toISOString(),
-          status: 'PENDING'
+          status: 'PENDING',
+          type: 'SUBSCRIPTION' // Type souscription/upgrade
         };
         const updatedSub = {
           ...(prev?.subscription || {}),
@@ -348,6 +349,7 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                   <tr className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b">
                      <th className="px-10 py-6">Date de transaction</th>
                      <th className="px-10 py-6">Référence</th>
+                     <th className="px-10 py-6">Type</th>
                      <th className="px-10 py-6">Méthode</th>
                      <th className="px-10 py-6 text-right">Montant</th>
                      <th className="px-10 py-6 text-right">Actions</th>
@@ -355,8 +357,13 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                </thead>
                <tbody className="divide-y divide-slate-50">
                   {paymentHistory.length === 0 ? (
-                    <tr><td colSpan={5} className="py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">Aucun paiement d'abonnement tracé</td></tr>
-                  ) : displayedPayments.map((p: any) => (
+                    <tr><td colSpan={6} className="py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">Aucun paiement d'abonnement tracé</td></tr>
+                  ) : displayedPayments.map((p: any) => {
+                      // Détecter le type de paiement
+                      const paymentType = p.type || (p.period === 'MONTH' || p.subscriptionId ? 'MONTHLY' : 'SUBSCRIPTION');
+                      const isMonthly = paymentType === 'MONTHLY';
+                      
+                      return (
                     <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
                         <td className="px-10 py-6">
                            <p className="text-sm font-black text-slate-900">{new Date(p.paymentDate || p.createdAt).toLocaleDateString('fr-FR')}</p>
@@ -365,9 +372,24 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                         <td className="px-10 py-6">
                            <p className="font-mono text-xs font-black text-indigo-600 uppercase tracking-tighter">#{p.reference || p.id.slice(0,12)}</p>
                         </td>
-                        <td className="px-10 py-6">
-                           <span className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[8px] font-black uppercase tracking-widest text-slate-600">{p.method}</span>
-                        </td>
+                            <td className="px-10 py-6">
+                               <div className="flex items-center gap-2">
+                                 {isMonthly ? (
+                                   <div className="flex items-center gap-2">
+                                     <Calendar size={14} className="text-emerald-500" />
+                                     <span className="px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[8px] font-black uppercase tracking-widest">Mensuel</span>
+                                   </div>
+                                 ) : (
+                                   <div className="flex items-center gap-2">
+                                     <TrendingUp size={14} className="text-indigo-500" />
+                                     <span className="px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[8px] font-black uppercase tracking-widest">Souscription</span>
+                                   </div>
+                                 )}
+                               </div>
+                            </td>
+                            <td className="px-10 py-6">
+                               <span className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[8px] font-black uppercase tracking-widest text-slate-600">{p.method}</span>
+                            </td>
                         <td className="px-10 py-6 text-right font-black text-slate-900">
                            {Number(p.amount).toLocaleString()} {currency}
                         </td>
@@ -380,7 +402,8 @@ const Subscription: React.FC<SubscriptionProps> = ({ user, currency }) => {
                            </button>
                         </td>
                      </tr>
-                  ))}
+                      );
+                  })}
                </tbody>
             </table>
          </div>

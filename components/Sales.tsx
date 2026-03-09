@@ -215,7 +215,17 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
   };
 
   const handleAddPayment = async () => {
-    if (paymentForm.amount <= 0) return;
+    if (paymentForm.amount <= 0) {
+      showToast('Le montant doit être supérieur à 0', 'error');
+      return;
+    }
+    
+    const remainingAmount = parseFloat(showPaymentModal.totalTtc) - parseFloat(showPaymentModal.amountPaid);
+    if (paymentForm.amount > remainingAmount) {
+      showToast(`Le montant ne peut pas dépasser le solde restant de ${remainingAmount.toLocaleString()} ${currency}`, 'error');
+      return;
+    }
+    
     setActionLoading(true);
     try {
       await apiClient.post(`/sales/${showPaymentModal.id}/payments`, paymentForm);
@@ -668,15 +678,58 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
                  <button onClick={() => setShowPaymentModal(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X size={24}/></button>
               </div>
               <div className="p-10 space-y-6">
-                 <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700 text-[10px] font-bold uppercase">Solde restant : {(parseFloat(showPaymentModal.totalTtc) - parseFloat(showPaymentModal.amountPaid)).toLocaleString()} {currency}</div>
-                 <div className="space-y-4">
-                    <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2 block">Montant versé</label><input type="number" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: parseFloat(e.target.value) || 0})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none" /></div>
-                    <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2 block">Canal</label><select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none appearance-none"><option value="CASH">ESPÈCES</option><option value="WAVE">WAVE</option><option value="ORANGE_MONEY">ORANGE MONEY</option><option value="MTN_MOMO">MTN MOMO</option></select></div>
-                    <input type="text" placeholder="Référence (Optionnel)" value={paymentForm.reference} onChange={e => setPaymentForm({...paymentForm, reference: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none" />
-                 </div>
-                 <button onClick={handleAddPayment} disabled={actionLoading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3">
-                    {actionLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18}/> VALIDER L'ENCAISSEMENT</>}
-                 </button>
+                 {(() => {
+                   const remainingAmount = parseFloat(showPaymentModal.totalTtc) - parseFloat(showPaymentModal.amountPaid);
+                   const isAmountExceeded = paymentForm.amount > remainingAmount;
+                   const isAmountValid = paymentForm.amount > 0 && !isAmountExceeded;
+                   
+                   return (
+                     <>
+                       <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700 text-[10px] font-bold uppercase">Solde restant : {remainingAmount.toLocaleString()} {currency}</div>
+                       {isAmountExceeded && (
+                         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-[10px] font-bold uppercase flex items-center gap-2">
+                           <AlertTriangle size={14} />
+                           Le montant dépasse le solde restant de {(paymentForm.amount - remainingAmount).toLocaleString()} {currency}
+                         </div>
+                       )}
+                       <div className="space-y-4">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2 block">Montant versé</label>
+                            <input 
+                              type="number" 
+                              value={paymentForm.amount} 
+                              max={remainingAmount}
+                              onChange={e => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setPaymentForm({...paymentForm, amount: value});
+                              }} 
+                              className={`w-full border rounded-2xl px-6 py-4 text-sm font-black outline-none transition-all ${
+                                isAmountExceeded 
+                                  ? 'bg-rose-50 border-rose-200 text-rose-600 focus:ring-rose-500/20' 
+                                  : 'bg-slate-50 border-slate-100 focus:ring-indigo-500/20'
+                              }`} 
+                            />
+                            {isAmountExceeded && (
+                              <p className="text-rose-500 text-[9px] font-bold mt-2 px-2">Montant maximum : {remainingAmount.toLocaleString()} {currency}</p>
+                            )}
+                          </div>
+                          <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2 block">Canal</label><select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none appearance-none"><option value="CASH">ESPÈCES</option><option value="WAVE">WAVE</option><option value="ORANGE_MONEY">ORANGE MONEY</option><option value="MTN_MOMO">MTN MOMO</option></select></div>
+                          <input type="text" placeholder="Référence (Optionnel)" value={paymentForm.reference} onChange={e => setPaymentForm({...paymentForm, reference: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none" />
+                       </div>
+                       <button 
+                         onClick={handleAddPayment} 
+                         disabled={actionLoading || !isAmountValid} 
+                         className={`w-full py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all ${
+                           !isAmountValid 
+                             ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                             : 'bg-slate-900 text-white hover:bg-emerald-600'
+                         }`}
+                       >
+                          {actionLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18}/> VALIDER L'ENCAISSEMENT</>}
+                       </button>
+                     </>
+                   );
+                 })()}
               </div>
            </div>
         </div>
@@ -830,12 +883,14 @@ const Sales = ({ currency, user, tenantSettings, plan }: { currency: string, use
                  </div>
               </div>
               <div className="flex-1 overflow-y-auto bg-slate-100/50 p-10 print:p-0 print:bg-white">
-                 <DocumentPreview 
-                    type={showDocGenerator.mode} 
-                    sale={showDocGenerator.sale} 
-                    tenant={tenantSettings} 
-                    currency={currency} 
-                 />
+                 <div id="document-render">
+                   <DocumentPreview 
+                      type={showDocGenerator.mode} 
+                      sale={showDocGenerator.sale} 
+                      tenant={tenantSettings} 
+                      currency={currency} 
+                   />
+                 </div>
               </div>
            </div>
         </div>

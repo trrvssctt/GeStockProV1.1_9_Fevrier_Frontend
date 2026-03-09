@@ -22,6 +22,16 @@ import ChatInterface from './components/ChatInterface';
 import SuperAdmin from './components/SuperAdmin';
 import SuperAdminLogin from './components/SuperAdminLogin';
 import Governance from './components/Governance';
+import HRDashboard from './components/rh/HRDashboard';
+import EmployeeList from './components/rh/EmployeeList';
+import EmployeeProfile from './components/rh/EmployeeProfile';
+import ContractList from './components/rh/ContractList';
+import PayrollManagement from './components/rh/PayrollManagement';
+import LeaveManagement from './components/rh/LeaveManagement';
+import DocumentCenter from './components/rh/DocumentCenter';
+import OrgChart from './components/rh/OrgChart';
+import DepartmentManager from './components/rh/DepartmentManager';
+import ModulePlaceholder from './components/rh/ModulePlaceholder';
 import Login from './components/Login';
 import RegistrationSuccess from './components/RegistrationSuccess';
 import Checkout from './components/Checkout';
@@ -71,8 +81,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             <p className="text-slate-500 font-medium uppercase text-[10px] tracking-[0.3em] leading-relaxed mb-10">
               Une erreur critique a été interceptée. Votre session est isolée pour protéger l'intégrité du tenant.
             </p>
-            <button 
-              onClick={() => window.location.reload()} 
+            <button
+              onClick={() => window.location.reload()}
               className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl flex items-center justify-center gap-3"
             >
               <RefreshCw size={18} /> RÉINITIALISER L'INSTANCE
@@ -92,7 +102,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [navigationMetadata, setNavigationMetadata] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+
   // États de flux post-inscription
   const [showRegSuccess, setShowRegSuccess] = useState<{ mustPay: boolean, planId: string, user: User, planObj?: SubscriptionPlan } | null>(null);
   const [showCheckout, setShowCheckout] = useState<{ planId: string, user: User, planObj?: SubscriptionPlan } | null>(null);
@@ -107,6 +117,18 @@ const App: React.FC = () => {
     invoiceLogo: '',
     companyName: 'GeStockPro Cloud'
   });
+
+  // Résout le planId depuis toutes les sources disponibles
+  const resolvePlanId = (u: any): string => {
+    if (u.planId) return u.planId;
+    // Souvent le backend inclut le plan dans user.tenant.plan ou user.tenant.subscription_plan
+    const tenantPlan = u?.tenant?.plan || u?.tenant?.subscription_plan || u?.tenant?.planId;
+    if (tenantPlan) return String(tenantPlan).toUpperCase();
+    // Fallback sur les données mock
+    const mock = MOCK_TENANTS.find((t: any) => t.id === u.tenantId);
+    if (mock?.plan) return mock.plan;
+    return 'BASIC';
+  };
 
   useEffect(() => {
     const primaryColor = (appSettings as any).primaryColor || '#4f46e5';
@@ -123,7 +145,7 @@ const App: React.FC = () => {
           platformLogo: settings.logoUrl || '',
           invoiceLogo: settings.logoUrl || '',
           companyName: settings.name || 'Ma Société',
-          ...settings 
+          ...settings
         });
         // Apply visual preferences globally so entire app reflects tenant settings
         try {
@@ -160,11 +182,8 @@ const App: React.FC = () => {
       if (session) {
         const freshUser = await authBridge.fetchMe(session.token);
         if (freshUser && freshUser.isActive) {
-          // Ensure planId is present: derive from tenant if backend didn't include it
-          const tenantFromMock = MOCK_TENANTS.find(t => t.id === freshUser.tenantId);
-          if (!freshUser.planId && tenantFromMock) {
-            (freshUser as any).planId = tenantFromMock.plan;
-          }
+          // Ensure planId is present: resolve from all sources
+          (freshUser as any).planId = resolvePlanId(freshUser);
           setCurrentUser(freshUser);
           setIsLoggedIn(true);
           await syncTenantSettings(freshUser);
@@ -182,20 +201,17 @@ const App: React.FC = () => {
     const registerMeta = user as any;
     // Only treat as a freshly-registered flow when backend/registration set explicit flags
     if ((registerMeta.mustPay === true || registerMeta.selectedPlanDetails) && !registerMeta.onboardingCompleted) {
-      setShowRegSuccess({ 
-        mustPay: registerMeta.mustPay === true, 
-        planId: registerMeta.planId, 
+      setShowRegSuccess({
+        mustPay: registerMeta.mustPay === true,
+        planId: registerMeta.planId,
         user: user,
-        planObj: registerMeta.selectedPlanDetails 
+        planObj: registerMeta.selectedPlanDetails
       });
       return;
     }
-    
-    // Ensure planId is set from tenant if not present
-    const tenantFromMock = MOCK_TENANTS.find(t => t.id === user.tenantId);
-    if (!user.planId && tenantFromMock) {
-      (user as any).planId = tenantFromMock.plan;
-    }
+
+    // Ensure planId is set from all available sources
+    (user as any).planId = resolvePlanId(user);
     setCurrentUser(user);
     setIsLoggedIn(true);
     await syncTenantSettings(user);
@@ -221,15 +237,21 @@ const App: React.FC = () => {
   };
 
   const handleContextualNavigate = (tab: string, meta?: any) => {
+    console.log('handleContextualNavigate appelé avec:', tab, 'meta:', meta);
+    console.log('currentUser:', currentUser);
+    console.log('authBridge.canAccess result:', currentUser ? authBridge.canAccess(currentUser, tab) : 'no user');
     if (currentUser && authBridge.canAccess(currentUser, tab)) {
       setNavigationMetadata(meta);
       setActiveTab(tab);
+      console.log('Navigation réussie vers:', tab);
+    } else {
+      console.log('Navigation bloquée vers:', tab);
     }
   };
 
   const currentTenant = MOCK_TENANTS.find(t => t.id === currentUser?.tenantId);
   const currentPlan = SUBSCRIPTION_PLANS.find(p => p.id === (currentUser?.planId || currentTenant?.plan));
-  
+
   if (isInitializing) {
     return (
       <div className="h-screen bg-slate-950 flex flex-col items-center justify-center gap-6">
@@ -242,8 +264,8 @@ const App: React.FC = () => {
   if (showRegSuccess) {
     const plan = showRegSuccess.planObj || SUBSCRIPTION_PLANS.find(p => p.id === showRegSuccess.planId);
     return <RegistrationSuccess mustPay={showRegSuccess.mustPay} onContinue={() => {
-      setShowOnboarding({ 
-        companyName: showRegSuccess?.user.name.replace('Admin ', '') || 'Ma Société', 
+      setShowOnboarding({
+        companyName: showRegSuccess?.user.name.replace('Admin ', '') || 'Ma Société',
         user: showRegSuccess!.user,
         mustPay: showRegSuccess!.mustPay,
         planId: showRegSuccess!.planId,
@@ -255,10 +277,10 @@ const App: React.FC = () => {
 
   if (showOnboarding) return <OnboardingWizard companyName={showOnboarding.companyName} user={showOnboarding.user} onComplete={async (data) => {
     if (showOnboarding?.mustPay) {
-      setShowCheckout({ 
-        planId: showOnboarding.planId, 
-        user: showOnboarding.user, 
-        planObj: showOnboarding.planObj 
+      setShowCheckout({
+        planId: showOnboarding.planId,
+        user: showOnboarding.user,
+        planObj: showOnboarding.planObj
       });
       setShowOnboarding(null);
     } else {
@@ -269,15 +291,15 @@ const App: React.FC = () => {
     }
   }} />;
 
-  if (showCheckout) return <Checkout 
-    planId={showCheckout.planId} 
+  if (showCheckout) return <Checkout
+    planId={showCheckout.planId}
     user={showCheckout.user}
-    planObj={showCheckout.planObj} 
+    planObj={showCheckout.planObj}
     onSuccess={() => {
       setActivationPending(true);
       setShowCheckout(null);
-    }} 
-    onCancel={() => resetToLogin()} 
+    }}
+    onCancel={() => resetToLogin()}
   />;
 
   if (activationPending) {
@@ -293,7 +315,7 @@ const App: React.FC = () => {
               Votre dossier a été transmis au Kernel pour activation. Vous pourrez vous connecter dès validation définitive de votre flux.
             </p>
           </div>
-          <button 
+          <button
             onClick={() => resetToLogin()}
             className="w-full py-5 bg-white text-slate-950 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-400 transition-all flex items-center justify-center gap-3 active:scale-95 group"
           >
@@ -324,8 +346,11 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (!currentUser) return null;
-    
-    if (!authBridge.canAccess(currentUser, activeTab)) {
+
+    // Normalize module check for RH subpages (rh.employees -> rh)
+    const moduleCheck = activeTab && String(activeTab).startsWith('rh') ? 'rh' : activeTab;
+
+    if (!authBridge.canAccess(currentUser, moduleCheck)) {
       return (
         <div className="flex flex-col items-center justify-center p-20 text-center animate-in fade-in duration-500">
           <div className="w-24 h-24 bg-rose-50 text-rose-600 rounded-[2.5rem] flex items-center justify-center mb-8 border border-rose-100 shadow-inner">
@@ -338,6 +363,46 @@ const App: React.FC = () => {
           <button onClick={() => setActiveTab('dashboard')} className="mt-10 px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest">Retour</button>
         </div>
       );
+    }
+
+    // RH: Gestion spécifique des modules RH
+    if (activeTab && String(activeTab).startsWith('rh')) {
+      switch (activeTab) {
+        case 'rh': return <HRDashboard onNavigate={handleContextualNavigate} />;
+        case 'rh.employees': return <EmployeeList onNavigate={handleContextualNavigate} />;
+        case 'rh.departments': return <DepartmentManager plan={currentPlan} onNavigate={handleContextualNavigate} />;
+        case 'rh.employee.profile': return <EmployeeProfile employeeId={navigationMetadata?.employeeId || ''} onNavigate={handleContextualNavigate} />;
+        case 'rh.contracts': return <ContractList onNavigate={handleContextualNavigate} />;
+        case 'rh.org': return <OrgChart onNavigate={handleContextualNavigate} />;
+        case 'rh.docs': return <DocumentCenter onNavigate={handleContextualNavigate} />;
+        case 'rh.leaves': return <LeaveManagement onNavigate={handleContextualNavigate} />;
+        case 'rh.recruitment': 
+          return <ModulePlaceholder 
+            onNavigate={handleContextualNavigate} 
+            moduleName="Recrutement" 
+            description="Gestion des offres d'emploi, processus de recrutement, suivi des candidatures et onboarding des nouveaux collaborateurs." 
+          />;
+        case 'rh.training':
+          return <ModulePlaceholder 
+            onNavigate={handleContextualNavigate} 
+            moduleName="Formation" 
+            description="Planification des sessions de formation, suivi des compétences, catalogues de formation et évaluations." 
+          />;
+        case 'rh.performance': 
+          return <ModulePlaceholder 
+            onNavigate={handleContextualNavigate} 
+            moduleName="Performance" 
+            description="Campagnes d'évaluation, suivi des objectifs, entretiens annuels et plans de développement." 
+          />;
+        case 'rh.payroll': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab={navigationMetadata?.initialTab || 'generation'} />;
+        case 'rh.payroll.settings': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="settings" />;
+        case 'rh.payroll.generation': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="generation" />;
+        case 'rh.payroll.slips': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="slips" />;
+        case 'rh.payroll.bonuses': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="advances" />;
+        case 'rh.payroll.advances': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="advances" />;
+        case 'rh.payroll.declarations': return <PayrollManagement onNavigate={handleContextualNavigate} initialTab="declarations" />;
+        default: return <HRDashboard onNavigate={handleContextualNavigate} />;
+      }
     }
 
     switch (activeTab) {
@@ -355,6 +420,7 @@ const App: React.FC = () => {
       case 'services': return <Services currency={appSettings.currency} />;
       case 'recovery': return <Recovery currency={appSettings.currency} />;
       case 'payments': return <Payments currency={appSettings.currency} tenantSettings={appSettings} />;
+      case 'my-leaves': return <LeaveManagement onNavigate={handleContextualNavigate} user={currentUser} />;
       case 'governance': return <Governance tenantId={currentUser.tenantId} plan={currentPlan} />;
       case 'subscription': return <Subscription user={currentUser} currency={appSettings.currency} />;
       case 'security': return <SecurityPanel />;
@@ -368,13 +434,13 @@ const App: React.FC = () => {
     <ErrorBoundary children={
       <ToastProvider>
         <div className={`min-h-screen ${activeTab === 'superadmin' ? 'bg-slate-950' : 'bg-slate-50'}`}>
-          <Layout 
-            user={currentUser!} 
-            activeTab={activeTab} 
+          <Layout
+            user={currentUser!}
+            activeTab={activeTab}
             setActiveTab={(tab) => {
-              setNavigationMetadata(null); 
+              setNavigationMetadata(null);
               setActiveTab(tab);
-            }} 
+            }}
             onLogout={handleLogout}
             isSuperAdminMode={activeTab === 'superadmin'}
             logoUrl={appSettings.platformLogo}

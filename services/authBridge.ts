@@ -19,7 +19,7 @@ const PLAN_RULES = {
       'payments',     // Trésorerie
       'governance',
       'subscription',
-      'settings'
+      'settings',
     ],
     limits: {
       customers: 5,
@@ -40,10 +40,9 @@ const PLAN_RULES = {
       'governance',
       'subscription',
       'settings',
-      //'audit',
       'security',
       'recovery',
-      'movements'
+      'movements',
     ],
     limits: {
       customers: 12,
@@ -64,11 +63,12 @@ const PLAN_RULES = {
       'governance',
       'subscription',
       'settings',
-      //'audit',
       'security',
       'recovery',
       'movements',
       'inventorycampaigns',
+      'rh',
+      'my-leaves'
     ], // Tous les modules autorisés sauf le panneau 'superadmin'
     limits: null    // Aucune limite
   }
@@ -139,8 +139,8 @@ export const authBridge = {
 
   fetchMe: async (token: string): Promise<User | null> => {
     try {
-      //const response = await fetch('http://localhost:3000/api/auth/me', {
-      const response = await fetch('https://gestockprov1-1-9-fevrier.onrender.com/api/auth/me', {
+      const response = await fetch('http://localhost:3000/api/auth/me', {
+     // const response = await fetch('https://gestockprov1-1-9-fevrier.onrender.com/api/auth/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) return null;
@@ -184,30 +184,68 @@ export const authBridge = {
     // ENTERPRISE : tous les modules
     if (plan.modules.includes('*')) return true;
 
-    // Verrouillage strict du périmètre du plan
-    if (!plan.modules.includes(moduleId)) return false;
+    // Verrouillage du périmètre du plan avec support des sous-modules
+    const hasModuleAccess = plan.modules.includes(moduleId) || 
+                           plan.modules.some(planModule => moduleId.startsWith(planModule + '.'));
+    if (!hasModuleAccess) return false;
 
-    // ADMIN : accès à tous les modules du plan
-    if (roles.includes(UserRole.ADMIN)) return true;
+    // ADMIN : accès à tous les modules du plan, y compris les sous-modules
+    if (roles.includes(UserRole.ADMIN)) {
+      // Pour les modules RH, autoriser tous les sous-modules si 'rh' est dans le plan
+      if (moduleId.startsWith('rh.') && plan.modules.includes('rh')) return true;
+      return true;
+    }
 
     const roleMap: Record<string, string[]> = {
-      [UserRole.SALES]: ['dashboard', 'sales'],
+      [UserRole.SALES]: ['dashboard', 'sales', 'my-leaves'],
       [UserRole.SUPER_ADMIN]: ['superadmin'],
+      [UserRole.HR_MANAGER]: [
+        'dashboard',
+        'rh',
+        'rh.employees', 'rh.departments', 'rh.contracts', 'rh.org', 'rh.docs', 'rh.leaves', 'rh.recruitment', 'rh.training', 'rh.performance',
+        'rh.payroll.settings', 'rh.payroll.generation', 'rh.payroll.slips', 'rh.payroll.bonuses', 'rh.payroll.advances', 'rh.payroll.declarations',
+        'employees',
+        'contracts',
+        'payroll',
+        'payslips',
+        'advances',
+        'declarations',
+        'documents',
+        'organigram',
+        'time',
+        'performance',
+        'my-leaves'
+      ],
       [UserRole.STOCK_MANAGER]: [
         'dashboard',
         'categories',
         'subcategories',
         'inventory',
         'movements',
-        'services'
+        'services',
+        // Allow limited visibility into HR (employees/documents) for operational managers
+        'rh',
+        'rh.employees', 'rh.departments', 'rh.docs',
+        'employees',
+        'documents',
+        'my-leaves'
       ],
       [UserRole.ACCOUNTANT]: [
         'dashboard',
         'payments',
         'customers',
-        'recovery'
+        'recovery',
+        // Accounting needs access to payroll-related resources in Enterprise
+        'rh',
+        'rh.payroll.settings', 'rh.payroll.generation', 'rh.payroll.slips', 'rh.payroll.bonuses', 'rh.payroll.advances', 'rh.payroll.declarations',
+        'payroll',
+        'payslips',
+        'advances',
+        'declarations',
+        'employees',
+        'my-leaves'
       ],
-      ['EMPLOYEE' as any]: ['dashboard', 'inventory', 'customers', 'services']
+      ['EMPLOYEE' as any]: ['dashboard', 'inventory', 'customers', 'services', 'my-leaves']
     };
 
     return roles.some(r => (roleMap[r as any] || []).includes(moduleId));
@@ -252,15 +290,26 @@ export const authBridge = {
     }
 
     return roles.some(r => {
+      if (r === UserRole.HR_MANAGER) {
+        // HR managers can perform all HR-related operations
+        return ['employees','contracts','payroll','payslips','advances','declarations','documents','organigram','time','performance'].includes(resource);
+      }
       if (r === UserRole.STOCK_MANAGER) {
-        return ['categories', 'subcategories', 'inventory', 'movements', 'services','inventorycampaigns'].includes(resource);
+        return ['categories', 'subcategories', 'inventory', 'movements', 'services','inventorycampaigns', 'employees', 'documents'].includes(resource);
       }
       if (r === UserRole.SALES) {
         if (['sales', 'customers', 'services'].includes(resource)) return true;
         return action === 'VIEW' && resource === 'inventory';
       }
       if (r === UserRole.ACCOUNTANT) {
-        if (['payments', 'settings', 'recovery', 'services','sales'].includes(resource)) return true;
+        if (['payments', 'settings', 'recovery', 'services','sales','payroll','payslips','advances','declarations','employees'].includes(resource)) return true;
+        return action === 'VIEW';
+      }
+      // Employees can view their own HR records and documents; they may create attendance/time entries
+      if (r === UserRole.EMPLOYEE) {
+        if (['payroll', 'payslips', 'documents', 'employees', 'organigram', 'time'].includes(resource)) {
+          return action === 'VIEW' || resource === 'time' || resource === 'documents';
+        }
         return action === 'VIEW';
       }
       return action === 'VIEW';

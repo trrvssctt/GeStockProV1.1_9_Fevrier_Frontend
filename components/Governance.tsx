@@ -22,8 +22,19 @@ interface GovernanceProps {
   plan?: SubscriptionPlan;
 }
 
+interface AvailableEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  department?: string;
+  position?: string;
+}
+
 const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [availableEmployees, setAvailableEmployees] = useState<AvailableEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
@@ -37,7 +48,8 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
     name: '', 
     email: '', 
     password: '', 
-    roles: [] as string[] 
+    roles: [] as string[],
+    employeeId: '' // Nouvelle propriété pour lier à un employé
   });
 
   const fetchUsers = async () => {
@@ -49,11 +61,24 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
     finally { setLoading(false); }
   };
 
+  const fetchAvailableEmployees = async () => {
+    // Charger les employés disponibles seulement si c'est ENTERPRISE/ENTERPRISE CLOUD et qu'on crée un nouvel utilisateur
+    if (planId.includes('ENTERPRISE') && !editingUser) {
+      try {
+        const employees = await apiClient.get('/auth/available-employees');
+        setAvailableEmployees(employees);
+      } catch (err) {
+        console.error('Erreur lors du chargement des employés:', err);
+      }
+    }
+  };
+
   useEffect(() => { fetchUsers(); }, []);
 
   const planId = String(plan?.id || plan?.name || plan?.plan || '').toUpperCase() || 'BASIC';
   const isUserCreationAllowed = authBridge.isCreationAllowed({ planId } as any, 'users', users.length);
   const isUserLimitReached = !isUserCreationAllowed;
+  const isEnterprise = planId.includes('ENTERPRISE');
 
   const toggleRole = (roleId: string) => {
     setUserData(prev => ({
@@ -81,7 +106,8 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
       name: user.name,
       email: user.email,
       password: '', // On ne pré-remplit pas le password pour la sécurité
-      roles: roles
+      roles: roles,
+      employeeId: (user as any).employeeId || ''
     });
     setShowUserModal(true);
   };
@@ -101,13 +127,20 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
         return;
       }
 
+      // Préparer le payload en excluant employeeId si vide ou pour les plans non-ENTERPRISE
+      const payload = { ...userData };
+      
+      // Pour les plans non-ENTERPRISE ou si employeeId est vide, on ne l'envoie pas
+      if (!isEnterprise || !payload.employeeId) {
+        delete (payload as any).employeeId;
+      }
+
       if (editingUser) {
         // Mise à jour : le password est optionnel
-        const payload = { ...userData };
         if (!payload.password) delete (payload as any).password;
         await apiClient.put(`/auth/users/${editingUser.id}`, payload);
       } else {
-        await apiClient.post('/auth/users', userData);
+        await apiClient.post('/auth/users', payload);
       }
       await fetchUsers();
       closeModal();
@@ -121,7 +154,8 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
   const closeModal = () => {
     setShowUserModal(false);
     setEditingUser(null);
-    setUserData({ name: '', email: '', password: '', roles: [] });
+    setUserData({ name: '', email: '', password: '', roles: [], employeeId: '' });
+    setAvailableEmployees([]);
     setError(null);
   };
 
@@ -179,7 +213,14 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
            </div>
         ) : (
           <button 
-            onClick={() => { closeModal(); setShowUserModal(true); }}
+            onClick={() => { 
+              closeModal(); 
+              setShowUserModal(true);
+              // Charger les employés disponibles si ENTERPRISE
+              if (isEnterprise) {
+                fetchAvailableEmployees();
+              }
+            }}
             className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black hover:bg-indigo-600 transition-all shadow-xl flex items-center gap-3 text-xs uppercase tracking-widest"
           >
             <UserPlus size={18} /> NOUVEL OPÉRATEUR
@@ -213,6 +254,8 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
             {filteredUsers.map(u => {
               const roles = (u as any).roles || [u.role];
               const isActive = (u as any).isActive ?? (u as any).is_active ?? true;
+              const employeeProfile = (u as any).employeeProfile;
+              
               return (
                 <tr key={u.id} className={`hover:bg-slate-50/50 transition-all group ${!isActive ? 'opacity-60' : ''}`}>
                   <td className="px-10 py-6">
@@ -224,8 +267,18 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
                           {!isActive && (
                             <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-600 text-[9px] font-black uppercase">INACTIF</span>
                           )}
+                          {employeeProfile && (
+                            <span className="px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
+                              EMPLOYÉ RH
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10px] text-slate-400 font-bold">{u.email}</p>
+                        {employeeProfile && (
+                          <p className="text-[9px] text-slate-300 font-bold">
+                            {employeeProfile.department} • {employeeProfile.position}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -284,8 +337,55 @@ const Governance: React.FC<GovernanceProps> = ({ tenantId, plan }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Identité & Sécurité</label>
-                      <input type="text" required value={userData.name} onChange={e => setUserData({...userData, name: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" placeholder="Nom Complet" />
-                      <input type="email" required value={userData.email} onChange={e => setUserData({...userData, email: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" placeholder="Email Professionnel" />
+                      
+                      {/* Sélecteur d'employé pour ENTERPRISE (création uniquement) */}
+                      {isEnterprise && !editingUser && (
+                        <div className="mb-4">
+                          <select 
+                            value={userData.employeeId}
+                            onChange={e => {
+                              const selectedEmployee = availableEmployees.find(emp => emp.id === e.target.value);
+                              if (selectedEmployee) {
+                                setUserData({
+                                  ...userData, 
+                                  employeeId: e.target.value,
+                                  name: `${selectedEmployee.firstName} ${selectedEmployee.lastName}`,
+                                  email: selectedEmployee.email
+                                });
+                              } else {
+                                setUserData({...userData, employeeId: e.target.value});
+                              }
+                            }}
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                          >
+                            <option value="">Créer un utilisateur indépendant</option>
+                            {availableEmployees.map(emp => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.firstName} {emp.lastName} - {emp.department} ({emp.position})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      
+                      <input 
+                        type="text" 
+                        required 
+                        value={userData.name} 
+                        onChange={e => setUserData({...userData, name: e.target.value})} 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                        placeholder="Nom Complet" 
+                        readOnly={isEnterprise && !editingUser && userData.employeeId}
+                      />
+                      <input 
+                        type="email" 
+                        required 
+                        value={userData.email} 
+                        onChange={e => setUserData({...userData, email: e.target.value})} 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                        placeholder="Email Professionnel" 
+                        readOnly={isEnterprise && !editingUser && userData.employeeId}
+                      />
                       <input type="password" required={!editingUser} value={userData.password} onChange={e => setUserData({...userData, password: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all" placeholder={editingUser ? "Laisser vide pour inchangé" : "Clé d'Accès Initiale"} />
                    </div>
 

@@ -5,7 +5,7 @@ import {
   Search, RefreshCw, Eye, Boxes, Lock, X, Save,
   ArrowRight, Loader2, AlertCircle, MapPin, Tag, Layers,
   TrendingUp, History, ArrowUpCircle, ArrowDownCircle, Info, ShieldAlert,
-  ShieldCheck, CheckCircle2, Upload, ImageIcon
+  ShieldCheck, CheckCircle2, Upload, ImageIcon, BarChart3
 } from 'lucide-react';
 import { StockItem, UserRole, SubscriptionPlan, User, StockMovement } from '../types';
 import { apiClient } from '../services/api';
@@ -184,21 +184,59 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
     }
   };
 
-  const filteredStocks = stocks.filter(item => {
-    const q = filters.search || '';
-    const matchesText = (item.name || '').toLowerCase().includes(q.toLowerCase()) || (item.sku || '').toLowerCase().includes(q.toLowerCase());
+  const stockStats = useMemo(() => {
+    const totalProducts = stocks.length;
+    const outOfStock = stocks.filter(item => item.currentLevel <= item.minThreshold).length;
+    const inStock = totalProducts - outOfStock;
+    const totalValue = stocks.reduce((sum, item) => sum + (item.currentLevel * Number(item.unitPrice)), 0);
+    const totalQuantity = stocks.reduce((sum, item) => sum + item.currentLevel, 0);
+    const averageValue = totalProducts > 0 ? totalValue / totalProducts : 0;
+    
+    return {
+      totalProducts,
+      outOfStock,
+      inStock,
+      totalValue,
+      totalQuantity,
+      averageValue,
+      outOfStockPercentage: totalProducts > 0 ? Math.round((outOfStock / totalProducts) * 100) : 0
+    };
+  }, [stocks]);
 
-    const scMatch = !filters.subcategoryId || (item.subcategoryId || item.subcategory_id) === filters.subcategoryId;
+  const filteredStocks = useMemo(() => {
+    const filtered = stocks.filter(item => {
+      const q = filters.search || '';
+      const matchesText = (item.name || '').toLowerCase().includes(q.toLowerCase()) || (item.sku || '').toLowerCase().includes(q.toLowerCase());
 
-    const created = (item as any).createdAt || (item as any).created_at || '';
-    const createdDate = created ? new Date(created).toISOString().split('T')[0] : '';
-    const matchesFrom = filters.dateFrom === '' || (createdDate && createdDate >= filters.dateFrom);
-    const matchesTo = filters.dateTo === '' || (createdDate && createdDate <= filters.dateTo);
+      const scMatch = !filters.subcategoryId || (item.subcategoryId || item.subcategory_id) === filters.subcategoryId;
 
-    const statusMatch = filters.status === 'ALL' || (filters.status === 'ALERT' && item.currentLevel <= item.minThreshold) || (filters.status === 'OK' && item.currentLevel > item.minThreshold);
+      const created = (item as any).createdAt || (item as any).created_at || '';
+      const createdDate = created ? new Date(created).toISOString().split('T')[0] : '';
+      const matchesFrom = filters.dateFrom === '' || (createdDate && createdDate >= filters.dateFrom);
+      const matchesTo = filters.dateTo === '' || (createdDate && createdDate <= filters.dateTo);
 
-    return matchesText && scMatch && matchesFrom && matchesTo && statusMatch;
-  });
+      const statusMatch = filters.status === 'ALL' || (filters.status === 'ALERT' && item.currentLevel <= item.minThreshold) || (filters.status === 'OK' && item.currentLevel > item.minThreshold);
+
+      return matchesText && scMatch && matchesFrom && matchesTo && statusMatch;
+    });
+
+    // Trier pour que les produits en rupture de stock apparaissent en premier
+    return filtered.sort((a, b) => {
+      const aOutOfStock = a.currentLevel <= a.minThreshold;
+      const bOutOfStock = b.currentLevel <= b.minThreshold;
+      
+      if (aOutOfStock && !bOutOfStock) return -1;
+      if (!aOutOfStock && bOutOfStock) return 1;
+      
+      // Si même statut, trier par niveau de stock croissant pour les ruptures
+      if (aOutOfStock && bOutOfStock) {
+        return a.currentLevel - b.currentLevel;
+      }
+      
+      // Pour les produits en stock, trier par nom
+      return a.name.localeCompare(b.name);
+    });
+  }, [stocks, filters]);
 
   const visibleStocks = viewMode === 'CARD' ? filteredStocks.slice(0, pageSize) : filteredStocks;
 
@@ -240,6 +278,50 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
         </div>
       )}
 
+      {/* Bannière Statistiques du Stock */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 print:hidden">
+        <div className={`p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden group border transition-all ${stockStats.outOfStock > 0 ? 'bg-rose-900 text-white border-rose-800' : 'bg-slate-900 text-white border-slate-800'}`}>
+          <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+            {stockStats.outOfStock > 0 ? <ShieldAlert size={80}/> : <Boxes size={80}/>}
+          </div>
+          <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${stockStats.outOfStock > 0 ? 'text-rose-300' : 'text-slate-400'}`}>
+            {stockStats.outOfStock > 0 ? 'ALERTE RUPTURES' : 'PRODUITS TOTAUX'}
+          </p>
+          <h3 className="text-4xl font-black">{stockStats.outOfStock > 0 ? stockStats.outOfStock : stockStats.totalProducts}</h3>
+          <p className={`text-sm font-black opacity-80 ${stockStats.outOfStock > 0 ? 'animate-pulse' : ''}`}>
+            {stockStats.outOfStock > 0 ? `${stockStats.outOfStockPercentage}% en rupture` : 'Articles référencés'}
+          </p>
+        </div>
+        
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group overflow-hidden">
+          <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:rotate-12 transition-transform"><Package size={60}/></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Stock Disponible</p>
+          <h3 className="text-2xl font-black text-slate-900">{stockStats.inStock}</h3>
+          <div className="w-full h-1.5 bg-slate-50 rounded-full mt-4 overflow-hidden shadow-inner">
+            <div className="h-full bg-emerald-500" style={{ width: `${stockStats.totalProducts > 0 ? (stockStats.inStock / stockStats.totalProducts) * 100 : 0}%` }}></div>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group overflow-hidden">
+          <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:-rotate-12 transition-transform"><TrendingUp size={60}/></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Valorisation Totale</p>
+          <h3 className="text-2xl font-black text-slate-900">{stockStats.totalValue.toLocaleString()} {currency}</h3>
+          <div className="w-full h-1.5 bg-slate-50 rounded-full mt-4 overflow-hidden shadow-inner">
+            <div className="h-full bg-indigo-500" style={{ width: '85%' }}></div>
+          </div>
+        </div>
+
+        <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col justify-center relative overflow-hidden">
+          <div className="absolute right-0 bottom-0 p-4 opacity-20"><BarChart3 size={80} className="text-emerald-700"/></div>
+          <div className="flex items-center gap-3 text-emerald-600 mb-2 relative z-10">
+            <TrendingUp size={20} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Quantité Globale</span>
+          </div>
+          <p className="text-lg font-black text-emerald-800 leading-tight relative z-10">{stockStats.totalQuantity.toLocaleString()}</p>
+          <p className="text-[8px] text-emerald-600 font-bold mt-1 relative z-10 uppercase">Unités en stock</p>
+        </div>
+      </div>
+
       <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -276,6 +358,15 @@ const Inventory = ({ currency, plan }: { currency: string, userRole?: UserRole, 
                 <select value={filters.subcategoryId} onChange={e => setFilters({...filters, subcategoryId: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
                   <option value="">Toutes</option>
                   {subcategories.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2">Statut Stock</label>
+                <select value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
+                  <option value="ALL">Tous les statuts</option>
+                  <option value="ALERT">⚠️ En Rupture</option>
+                  <option value="OK">✅ En Stock</option>
                 </select>
               </div>
 

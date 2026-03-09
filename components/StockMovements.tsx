@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowUpCircle, ArrowDownCircle, RefreshCw, Plus, Search, 
@@ -14,6 +13,199 @@ import {
 } from 'recharts';
 import { apiClient } from '../services/api';
 import { StockItem } from '../types';
+
+// ─── Composant document paginé (défini HORS du composant principal) ────────
+
+interface MovReportHeaderProps {
+  tenantSettings: any;
+  dateFrom: string;
+  dateTo: string;
+  pageNumber: number;
+  totalPages: number;
+}
+const MovReportHeader: React.FC<MovReportHeaderProps> = ({ tenantSettings, dateFrom, dateTo, pageNumber, totalPages }) => (
+  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+    <div>
+      {tenantSettings?.logoUrl ? (
+        <img src={tenantSettings.logoUrl} className="h-14 w-auto object-contain mb-2 max-w-[180px]" alt="Logo" />
+      ) : (
+        <div className="text-2xl font-black text-indigo-600 mb-1 uppercase tracking-tighter">
+          {tenantSettings?.name || 'VOTRE SOCIÉTÉ'}
+        </div>
+      )}
+      <div className="space-y-0.5 text-[9px] font-bold text-slate-400 uppercase">
+        {tenantSettings?.address && <div className="flex items-center gap-1"><MapPin size={8} className="text-indigo-400"/>{tenantSettings.address}</div>}
+        {tenantSettings?.email  && <div className="flex items-center gap-1"><Mail   size={8} className="text-indigo-400"/>{tenantSettings.email}</div>}
+        {tenantSettings?.phone  && <div className="flex items-center gap-1"><Phone  size={8} className="text-indigo-400"/>{tenantSettings.phone}</div>}
+      </div>
+    </div>
+    <div className="text-right">
+      <h1 className="text-2xl font-black text-slate-900 tracking-tighter mb-1">RAPPORT DE MOUVEMENTS</h1>
+      <p className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded inline-block uppercase">
+        Période : {dateFrom} au {dateTo}
+      </p>
+      {totalPages > 1 && (
+        <p className="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-widest">
+          Page {pageNumber} / {totalPages}
+        </p>
+      )}
+    </div>
+  </div>
+);
+
+interface MovReportFooterProps {
+  isLastPage: boolean;
+  tenantName: string;
+  dateFrom: string;
+  dateTo: string;
+  fingerprint: string;
+}
+const MovReportFooter: React.FC<MovReportFooterProps> = ({ isLastPage, tenantName, dateFrom, dateTo, fingerprint }) => (
+  <div className="pt-5 border-t border-slate-100 mt-auto">
+    {isLastPage ? (
+      <div className="flex justify-between items-end">
+        <div className="text-[8px] font-bold uppercase space-y-1 text-slate-300 italic">
+          <p>Généré par GeStocPro Cloud • {tenantName}</p>
+          <p>Rapport mouvements — {dateFrom} au {dateTo}</p>
+          <p className="mt-2">Empreinte : {fingerprint}</p>
+        </div>
+        <div className="w-28 h-12 border border-slate-300 rounded-lg flex items-center justify-center text-[9px] font-black uppercase text-slate-300 italic">
+          Signature
+        </div>
+      </div>
+    ) : (
+      <div className="flex justify-between items-center">
+        <p className="text-[8px] text-slate-300 font-bold uppercase italic">
+          GeStocPro Cloud • {tenantName} — Rapport mouvements — Suite →
+        </p>
+        <p className="text-[7px] text-slate-400 font-bold uppercase tracking-widest">
+          {dateFrom} / {dateTo}
+        </p>
+      </div>
+    )}
+  </div>
+);
+
+interface MovTableProps { rows: any[] }
+const MovTable: React.FC<MovTableProps> = ({ rows }) => (
+  <table className="w-full text-left border-collapse">
+    <thead>
+      <tr className="bg-slate-900 text-white text-[9px] font-black uppercase">
+        <th className="p-3">DATE</th>
+        <th className="p-3">ARTICLE</th>
+        <th className="p-3">SKU</th>
+        <th className="p-3 text-center">TYPE</th>
+        <th className="p-3 text-right">QTÉ</th>
+        <th className="p-3">OPÉRATEUR</th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-slate-100">
+      {rows.length === 0 ? (
+        <tr>
+          <td colSpan={6} className="py-12 text-center text-[10px] font-black text-slate-300 uppercase">
+            Aucune donnée pour cette période
+          </td>
+        </tr>
+      ) : rows.map((m: any, i: number) => {
+        const p = m.stock_item || m.stockItem || m.StockItem || {};
+        const isIn = ['IN', 'ENTREE', 'ENTRY', 'ACHAT'].includes((m.type || '').toUpperCase());
+        return (
+          <tr key={i} className="text-xs font-bold">
+            <td className="p-3 text-slate-500">{new Date(m.createdAt).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
+            <td className="p-3 text-slate-900 uppercase truncate max-w-[150px]">{p.name}</td>
+            <td className="p-3 font-mono text-[9px] text-slate-400">{p.sku}</td>
+            <td className="p-3 text-center">
+              <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border ${isIn ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                {m.type}
+              </span>
+            </td>
+            <td className={`p-3 text-right font-black ${isIn ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {isIn ? '+' : '-'}{Math.abs(m.qty).toLocaleString()}
+            </td>
+            <td className="p-3 text-slate-500">{m.userRef || '—'}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+);
+
+const ROWS_FIRST_PAGE = 12;
+const ROWS_PER_PAGE   = 20;
+
+interface StockMovementReportProps {
+  movements: any[];
+  tenantSettings: any;
+  dateFrom: string;
+  dateTo: string;
+}
+const StockMovementReport: React.FC<StockMovementReportProps> = ({ movements, tenantSettings, dateFrom, dateTo }) => {
+  const totalEntrees = movements.filter(m => ['IN','ENTREE','ENTRY','ACHAT'].includes((m.type||'').toUpperCase())).reduce((s,m) => s + Math.abs(Number(m.qty)||0), 0);
+  const totalSorties = movements.filter(m => !['IN','ENTREE','ENTRY','ACHAT'].includes((m.type||'').toUpperCase())).reduce((s,m) => s + Math.abs(Number(m.qty)||0), 0);
+  const fingerprint  = useMemo(() => `${movements.length.toString(16)}-${Date.now().toString(36).toUpperCase().slice(-6)}`, []); // eslint-disable-line
+
+  const pages: any[][] = [];
+  pages.push(movements.slice(0, ROWS_FIRST_PAGE));
+  const rest = movements.slice(ROWS_FIRST_PAGE);
+  for (let i = 0; i < rest.length; i += ROWS_PER_PAGE) pages.push(rest.slice(i, i + ROWS_PER_PAGE));
+  const totalPages = pages.length;
+
+  return (
+    <>
+      <style>{`@media print { @page{size:A4;margin:0} body{margin:0} .mov-page{box-shadow:none!important;border:none!important} }`}</style>
+      {pages.map((pageRows, idx) => {
+        const pageNumber  = idx + 1;
+        const isLastPage  = pageNumber === totalPages;
+        const isFirstPage = pageNumber === 1;
+        return (
+          <div
+            key={pageNumber}
+            className="mov-page bg-white w-full mx-auto text-slate-800 font-sans flex flex-col shadow-xl border border-slate-200 mb-6"
+            style={{ padding: '32px 40px', pageBreakAfter: isLastPage ? 'auto' : 'always', breakAfter: isLastPage ? 'auto' : 'page', minHeight: '297mm' }}
+          >
+            {/* ══ EN-TÊTE — toutes les pages ══ */}
+            <MovReportHeader tenantSettings={tenantSettings} dateFrom={dateFrom} dateTo={dateTo} pageNumber={pageNumber} totalPages={totalPages} />
+
+            {/* ══ KPIs — page 1 uniquement ══ */}
+            {isFirstPage && (
+              <div className="grid grid-cols-3 gap-4 mt-6">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Total Mouvements</p>
+                  <p className="text-xl font-black text-slate-900">{movements.length.toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Entrées (qté)</p>
+                  <p className="text-xl font-black text-emerald-600">+{totalEntrees.toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Sorties (qté)</p>
+                  <p className="text-xl font-black text-rose-600">-{totalSorties.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {/* ══ LABEL CONTINUATION — pages 2+ ══ */}
+            {!isFirstPage && (
+              <p className="mt-3 mb-1 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                Suite des mouvements — {dateFrom} au {dateTo}
+              </p>
+            )}
+
+            {/* ══ TABLEAU ══ */}
+            <div className="mt-5 flex-1">
+              <MovTable rows={pageRows} />
+            </div>
+
+            {/* ══ PIED DE PAGE — toutes les pages ══ */}
+            <MovReportFooter isLastPage={isLastPage} tenantName={tenantSettings?.name || 'GeStocPro'} dateFrom={dateFrom} dateTo={dateTo} fingerprint={fingerprint} />
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
+// ─── Composant principal ───────────────────────────────────────────────────
 
 const StockMovements = ({ currency, tenantSettings }: { currency: string, tenantSettings?: any }) => {
   const [movements, setMovements] = useState<any[]>([]);
@@ -423,29 +615,29 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
       </div>
 
       {showExportModal && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300 print:hidden">
-          <div className="bg-white w-full max-w-6xl rounded-[4rem] shadow-2xl overflow-hidden flex flex-col h-[90vh] animate-in zoom-in-95 duration-500">
-             <div className="px-10 py-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-4">
-                  <Download className="text-emerald-500" size={28}/>
-                  <h3 className="text-xl font-black uppercase tracking-tight">Exportation Stratégique des Mouvements</h3>
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300 print:hidden">
+          <div className="bg-white w-full max-w-6xl rounded-[4rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-500">
+             <div className="px-6 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <Download className="text-emerald-500" size={24}/>
+                  <h3 className="text-lg font-black uppercase tracking-tight">Exportation Stratégique des Mouvements</h3>
                 </div>
-                <button onClick={() => setShowExportModal(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><X size={24}/></button>
+                <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-white/10 rounded-2xl transition-all"><X size={20}/></button>
              </div>
              
-             <div className="flex-1 overflow-hidden grid grid-cols-12">
-                <div className="col-span-12 lg:col-span-4 border-r border-slate-100 flex flex-col bg-slate-50/50">
-                  <div className="p-8 space-y-8 flex-1 overflow-y-auto custom-scrollbar">
-                    <div className="space-y-4">
+             <div className="flex-1 overflow-hidden grid grid-cols-12 min-h-0">
+                <div className="col-span-12 lg:col-span-4 border-r border-slate-100 flex flex-col bg-slate-50/50 min-h-0">
+                  <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                    <div className="space-y-3">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Période du Rapport</label>
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 gap-3">
                         <div className="relative">
                           <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
                           <input 
                             type="date" 
                             value={exportDates.from} 
                             onChange={e => setExportDates({...exportDates, from: e.target.value})}
-                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-4 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
                           />
                         </div>
                         <div className="relative">
@@ -454,13 +646,13 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                             type="date" 
                             value={exportDates.to} 
                             onChange={e => setExportDates({...exportDates, to: e.target.value})}
-                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-4 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" 
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Format de Sortie</label>
                       <div className="grid grid-cols-1 gap-3">
                          {[
@@ -473,19 +665,19 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                              <div key={fmt.id} className="relative">
                                <button
                                  onClick={() => setExportFormat(keyId as any)}
-                                 className={`p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${exportFormat === keyId ? 'border-indigo-600 bg-white shadow-lg shadow-indigo-50' : 'border-white bg-white/50 hover:border-slate-200'}`}
+                                 className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between group w-full ${exportFormat === keyId ? 'border-indigo-600 bg-white shadow-lg shadow-indigo-50' : 'border-white bg-white/50 hover:border-slate-200'}`}
                                >
-                                 <div className="flex items-center gap-4">
-                                   <div className={`w-10 h-10 ${fmt.bg} ${fmt.color} rounded-xl flex items-center justify-center shadow-inner`}>
-                                     <Icon size={20} />
+                                 <div className="flex items-center gap-3">
+                                   <div className={`w-8 h-8 ${fmt.bg} ${fmt.color} rounded-xl flex items-center justify-center shadow-inner`}>
+                                     <Icon size={16} />
                                    </div>
-                                   <span className={`text-[10px] font-black uppercase ${exportFormat === keyId ? 'text-indigo-600' : 'text-slate-500'}`}>{fmt.label}</span>
+                                   <span className={`text-[9px] font-black uppercase ${exportFormat === keyId ? 'text-indigo-600' : 'text-slate-500'}`}>{fmt.label}</span>
                                  </div>
-                                 {exportFormat === keyId && <CheckCircle2 className="text-indigo-600" size={18} />}
+                                 {exportFormat === keyId && <CheckCircle2 className="text-indigo-600" size={16} />}
                                </button>
                                {fmt.id === 'IMAGE' && exportFormat === 'IMAGE' && (
-                                 <div className="absolute right-0 top-full mt-2 flex items-center gap-2">
-                                   <select value={imageFormat} onChange={e => setImageFormat(e.target.value as any)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-black">
+                                 <div className="mt-2 flex items-center gap-2">
+                                   <select value={imageFormat} onChange={e => setImageFormat(e.target.value as any)} className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-black">
                                      <option value="PNG">PNG</option>
                                      <option value="JPG">JPG</option>
                                    </select>
@@ -497,94 +689,40 @@ const StockMovements = ({ currency, tenantSettings }: { currency: string, tenant
                       </div>
                     </div>
                     
-                    <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100">
-                       <p className="text-[9px] text-indigo-700 font-bold uppercase leading-relaxed">
-                         <Info className="inline-block mr-1 mb-0.5" size={10} /> 
+                    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                       <p className="text-[8px] text-indigo-700 font-bold uppercase leading-relaxed">
+                         <Info className="inline-block mr-1 mb-0.5" size={8} /> 
                          L'export inclut automatiquement le logo et les mentions légales de votre instance "{tenantSettings?.name || 'GeStocPro'}".
                        </p>
                     </div>
                   </div>
 
-                  <div className="p-8 bg-white border-t border-slate-100 flex flex-col gap-3">
+                  <div className="p-6 bg-white border-t border-slate-100 flex flex-col gap-3 shrink-0">
                     <button 
                       onClick={handleExport}
-                      className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95"
+                      className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95"
                     >
-                      {exportFormat === 'PDF' ? <Printer size={18}/> : <Download size={18}/>} GÉNÉRER LE FICHIER
+                      {exportFormat === 'PDF' ? <Printer size={16}/> : <Download size={16}/>} GÉNÉRER LE FICHIER
                     </button>
                   </div>
                 </div>
 
+                {/* ══ ZONE PREVIEW — remplacée par StockMovementReport paginé ══ */}
                 <div className="col-span-12 lg:col-span-8 flex flex-col bg-white overflow-hidden relative">
-                  {/* PREVIEW EN TEMPS RÉEL */}
-                  <div className="p-8 bg-slate-50/50 border-b flex justify-between items-center">
+                  <div className="p-8 bg-slate-50/50 border-b flex justify-between items-center shrink-0">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aperçu en temps réel ({exportPreviewData.length} lignes)</h4>
                     <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Visualisation Dynamique</span>
                   </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-6 lg:p-12 custom-scrollbar bg-slate-100/30">
-                    <div id="export-preview-stock" className="bg-white p-6 lg:p-12 w-full mx-auto text-slate-800 shadow-xl border border-slate-200 font-sans lg:scale-100 scale-100 origin-top">
-                      {/* Logo et Header Preview */}
-                      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
-                        <div>
-                          {tenantSettings?.logoUrl ? (
-                            <img src={tenantSettings.logoUrl} className="h-16 w-auto object-contain mb-2 max-w-[200px]" alt="Logo" />
-                          ) : (
-                            <div className="text-2xl font-black text-indigo-600 mb-2 uppercase tracking-tighter">{tenantSettings?.name || 'VOTRE SOCIÉTÉ'}</div>
-                          )}
-                          <div className="space-y-0.5 text-[10px] font-bold text-slate-400">
-                            <div>{tenantSettings?.address || ''}</div>
-                            <div>{tenantSettings?.email || ''} {tenantSettings?.phone ? '• ' + tenantSettings.phone : ''}</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <h1 className="text-2xl font-black text-slate-900 tracking-tighter mb-1">RAPPORT DE MOUVEMENTS</h1>
-                          <p className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded inline-block">PÉRIODE : {exportDates.from} AU {exportDates.to}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-6">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="bg-slate-900 text-white text-[10px] font-black uppercase">
-                              <th className="p-3">DATE</th>
-                              <th className="p-3">ARTICLE</th>
-                              <th className="p-3">SKU</th>
-                              <th className="p-3 text-center">TYPE</th>
-                              <th className="p-3 text-right">QTE</th>
-                              <th className="p-3">OPÉRATEUR</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {exportPreviewData.length === 0 ? (
-                              <tr><td colSpan={6} className="py-12 text-center text-[10px] font-black text-slate-300 uppercase">Aucune donnée pour cette période</td></tr>
-                            ) : exportPreviewData.map((m, i) => {
-                              const p = m.stock_item || m.stockItem || m.StockItem || {};
-                              return (
-                                <tr key={i} className="text-[12px] font-bold">
-                                  <td className="p-3 text-slate-500">{new Date(m.createdAt).toLocaleString()}</td>
-                                  <td className="p-3 text-slate-900 uppercase truncate max-w-[160px]">{p.name}</td>
-                                  <td className="p-3">{p.sku}</td>
-                                  <td className="p-3 text-center">{m.type}</td>
-                                  <td className="p-3 text-right font-black">{m.qty}</td>
-                                  <td className="p-3">{m.userRef}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-10 border-t border-slate-100 pt-6 flex justify-between items-end opacity-40 grayscale">
-                        <div className="text-[9px] font-bold uppercase space-y-1">
-                           <p>Généré par GeStocPro Cloud</p>
-                           <p>Empreinte : {Math.random().toString(36).substring(7).toUpperCase()}</p>
-                        </div>
-                        <div className="w-28 h-12 border border-slate-300 rounded-lg flex items-center justify-center text-[10px] font-black uppercase text-slate-300 italic">Signature</div>
-                      </div>
-                    </div>
+                  <div id="export-preview-stock" className="flex-1 overflow-y-auto p-4 lg:p-8 custom-scrollbar bg-slate-100/30">
+                    <StockMovementReport
+                      movements={exportPreviewData}
+                      tenantSettings={tenantSettings}
+                      dateFrom={exportDates.from}
+                      dateTo={exportDates.to}
+                    />
                   </div>
                 </div>
+
              </div>
           </div>
         </div>

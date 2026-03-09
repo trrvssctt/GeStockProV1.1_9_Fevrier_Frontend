@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
   ArrowRight, 
@@ -111,9 +110,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black italic">G</div>
-            <span className="text-xl font-black tracking-tighter uppercase">GeStock<span className="text-indigo-600">Pro</span></span>
+          <div className="flex items-center gap-3">
+            <img src="../../assets/logo_gestockpro-removebg-preview.png" alt="GeStockPro" className="h-12 w-auto" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
             <a href="#features" className="hover:text-slate-900 transition-colors">Fonctionnalités</a>
@@ -141,11 +139,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
       {/* Hero Section */}
       <section className="pt-40 pb-20 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-6">
               <Zap size={12} /> AI-Native ERP for Modern Business
             </div>
@@ -158,9 +152,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <div className="flex flex-wrap gap-4">
               <button 
                 onClick={() => onLogin({ openRegister: true, planId: 'BASIC', regStep: 1 })}
-                className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 hover:bg-indigo-600 transition-all shadow-2xl shadow-slate-200 group"
+                className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 hover:bg-indigo-600 transition-all shadow-2xl shadow-slate-200"
               >
-                Essayer gratuitement <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                Essayer gratuitement <ArrowRight size={18} />
               </button>
               <a 
                 href="#pricing"
@@ -171,21 +165,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </div>
             <div className="mt-12 flex items-center gap-6">
               <div className="flex -space-x-3">
-                {[1,2,3,4].map(i => (
-                  <img key={i} src={`https://picsum.photos/seed/${i+10}/100/100`} className="w-10 h-10 rounded-full border-2 border-white object-cover" referrerPolicy="no-referrer" />
-                ))}
+                <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold border-2 border-white">M</div>
+                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold border-2 border-white">A</div>
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 font-bold border-2 border-white">S</div>
+                <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center text-rose-600 font-bold border-2 border-white">+</div>
               </div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                 Rejoint par +500 entreprises en 2024
               </p>
             </div>
-          </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative"
-          >
+          </div>
+          <div className="relative">
             <div className="absolute -inset-4 bg-indigo-500/10 blur-3xl rounded-full"></div>
             <div className="relative bg-slate-900 rounded-[3rem] p-4 shadow-2xl border border-slate-800 overflow-hidden">
               <div className="bg-slate-800/50 h-8 flex items-center gap-2 px-6 border-b border-slate-700">
@@ -193,26 +183,23 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 <div className="w-2 h-2 rounded-full bg-amber-500"></div>
                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
               </div>
-              <img 
-                src="https://picsum.photos/seed/dashboard/1200/800" 
-                alt="GeStockPro Dashboard" 
-                className="w-full h-auto rounded-b-[2rem] opacity-90"
-                referrerPolicy="no-referrer"
-              />
+              <div className="w-full h-96 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-b-[2rem] flex items-center justify-center">
+                <img src="../../assets/logo_gestockpro.png" alt="GeStockPro Dashboard" className="h-32 w-auto opacity-80" />
+              </div>
             </div>
             {/* Floating Stats */}
-            <div className="absolute -bottom-10 -left-10 bg-white p-6 rounded-3xl shadow-2xl border border-slate-100 animate-bounce-slow">
+            <div className="absolute -bottom-10 -left-10 bg-white p-6 rounded-3xl shadow-2xl border border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
-                  <BarChart3 size={24} />
+                <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center">
+                  <BarChart3 className="text-emerald-600" size={24} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Croissance</p>
-                  <p className="text-2xl font-black text-slate-900">+24.8%</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ventes aujourd'hui</p>
+                  <p className="text-lg font-black text-slate-900">+24.5%</p>
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -250,11 +237,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           <div className="grid lg:grid-cols-2 gap-20 items-center">
             <div className="relative">
               <div className="absolute -inset-10 bg-indigo-500/5 blur-3xl rounded-full"></div>
-              <img 
-                src="https://picsum.photos/seed/solution/800/800" 
-                className="relative w-full rounded-[4rem] shadow-2xl border border-slate-100" 
-                referrerPolicy="no-referrer"
-              />
+              <div className="relative w-full rounded-[4rem] shadow-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-20">
+                <img src="../../assets/logo_gestockpro.png" alt="GeStockPro Solution" className="h-74 w-auto" />
+              </div>
             </div>
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-6">
@@ -295,9 +280,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((f, i) => (
-              <motion.div 
+              <div 
                 key={i}
-                whileHover={{ y: -5 }}
                 className="p-8 bg-slate-900/50 border border-slate-800 rounded-3xl hover:border-indigo-500/50 transition-all"
               >
                 <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-6">
@@ -305,7 +289,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 </div>
                 <h3 className="text-lg font-black uppercase tracking-tight mb-4">{f.title}</h3>
                 <p className="text-sm text-slate-400 leading-relaxed font-medium">{f.description}</p>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>
@@ -368,14 +352,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 </div>
               </div>
               <ul className="space-y-4 mb-10 flex-grow">
-                {["Utilisateurs Illimités", "Inventory Campaigns", "Récouvrement", "Chatbot Intelligent", "Support Premium 24/7", "Onboarding Dédié"].map((item, i) => (
+                {["Utilisateurs Illimités","Module RH Avancé","Inventory Campaigns", "Récouvrement", "Chatbot Intelligent", "Support Premium 24/7"].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-sm font-medium text-slate-600">
                     <CheckCircle2 size={18} className="text-purple-500" /> {item}
                   </li>
                 ))}
               </ul>
               <button onClick={() => onLogin({ openRegister: true, planId: 'ENTERPRISE', regStep: 1 })} className="w-full py-4 bg-slate-50 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">Commencer</button>
-            </div>
+            </div>  
           </div>
         </div>
       </section>
@@ -446,7 +430,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               <div key={i} className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm hover:shadow-md transition-all">
                 <p className="text-slate-600 italic mb-8 leading-relaxed text-sm">"{t.text}"</p>
                 <div className="flex items-center gap-4">
-                  <img src={`https://picsum.photos/seed/${i+50}/100/100`} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${i === 0 ? 'bg-indigo-500' : i === 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                    {t.name.split(' ').map(n => n[0]).join('')}
+                  </div>
                   <div>
                     <p className="text-sm font-black uppercase tracking-tight">{t.name}</p>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.role}</p>
@@ -518,7 +504,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   {activeFaq === i ? <Minus size={18} /> : <Plus size={18} />}
                 </button>
                 {activeFaq === i && (
-                  <div className="p-6 pt-0 text-slate-500 text-sm font-medium leading-relaxed animate-in slide-in-from-top-2 duration-300">
+                  <div className="p-6 pt-0 text-slate-500 text-sm font-medium leading-relaxed">
                     {faq.answer}
                   </div>
                 )}
@@ -630,8 +616,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           <div className="grid md:grid-cols-4 gap-12 mb-20">
             <div className="col-span-2">
               <div className="flex items-center gap-2 mb-8">
-                <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black italic">G</div>
-                <span className="text-xl font-black tracking-tighter uppercase">GeStock<span className="text-indigo-600">Pro</span></span>
+                <div className="flex items-center gap-3">
+            <img src="../../assets/logo_gestockpro-removebg-preview.png" alt="GeStockPro" className="h-12 w-auto" />
+          </div>
               </div>
               <p className="text-slate-500 font-medium max-w-sm leading-relaxed mb-8">
                 L'ERP intelligent conçu pour propulser les TPE et PME africaines vers l'excellence opérationnelle.
